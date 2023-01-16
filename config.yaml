@@ -1,0 +1,29 @@
+all_config:
+#Github-token-2023-1-16 21:32:05
+ github_token: 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
+ dingding:
+   - enable: 1
+   - webhook: https://oapi.dingtalk.com/robot/send?access_token=08d7136aceaa2db48027148fed2a8e200dfeb16bcdfb928cbce4a6479de2cba1
+   - secretKey: SEC00554ed92b8317532bfd0f60bc2b4b933dbdbbb4db05ce4df4ea0849ed51591f
+   - app_name: dingding
+ feishu:
+   - enable: 0
+   - webhook: xxx
+   - app_name: feishu
+ server:
+   - enable: 0
+   - sckey: 123123
+   - app_name: server
+ tgbot:
+   - enable: 0
+   - token: 123
+   - group_id: 123
+   - app_name: tgbot
+ pushplus:
+   - enable: 0
+   - token: 123456
+   - app_name: pushplus
+ translate:
+  - enable: 0
+ black_user:
+   - AlAIAL90
