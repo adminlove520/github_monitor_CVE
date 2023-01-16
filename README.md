@@ -1,41 +1,7 @@
 # github-cve-monitor
 
-![github-cve-monitor](https://socialify.git.ci/yhy0/github-cve-monitor/image?description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Floating%20Cogs&pulls=1&stargazers=1&theme=Light)
-
-## 实时监控github上新增的cve和安全工具更新，多渠道推送通知
+## 实时监控github上新增的cve、自定义关键词、安全工具更新、大佬仓库监控，并多渠道推送通知
 
 每3分钟检测一次github是否有新的cve漏洞提交或者安全工具更新记录，若有则通过配置的渠道通知用户
-
-时间间隔修改在 467 行
-
-建议使用[screen命令](https://www.runoob.com/linux/linux-comm-screen.html)运行在自己的linux vps后台上，就可以愉快的接收各种cve了
-
-```bash
-#创建一个screen，名字为github_cve，在新窗口运行本项目, 成功后直接叉掉该窗口, 项目就会在后台一直运行了
-screen -S github_cve			
-#查看创建的screen
-screen -ls 		
-#连接github_cve后台screen，如果存在的话
-screen -r github_cve		
-```
-
-# 使用帮助
-
-`tools_list.yaml` 监控的工具列表，新添加按照已有的格式写
-
-`config.yaml` 推送token 设置
-
-
-
-详细见[使用帮助](UseHelp.md)
-
-# 效果
-
-<img src="images/image-20211118145021974.png" />
-
-# 参考
-
- [洛米唯熊](https://my.oschina.net/u/4581868/blog/4380482)
-
-[kiang70](https://github.com/kiang70/Github-Monitor)
+# CreateBy 东方隐侠·Anonymous
 
