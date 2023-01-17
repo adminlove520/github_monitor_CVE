@@ -16,8 +16,6 @@ tools_list:
 keyword_list:
  - Sql注入
  - cnvd
- - 渗透
- - 安全
  - 红队
 
 user_list:
