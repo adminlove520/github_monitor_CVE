@@ -33,7 +33,7 @@ jobs:
         #   github_token: ${{ secrets.GITHUB_TOKEN }}
         #   secretKey: ${{ secrets.DINGDING_SECRETKEY }}
         #   webhook: ${{ secrets.DINGDING_WEBHOOK }}
-        run: python3 ./main.py
+        run: python3 ./github_cve_monitor.py
 
     #   - name: test run
     #     run: echo ${{ env.CleanKeywords }}
