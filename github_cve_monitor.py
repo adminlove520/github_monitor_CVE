@@ -1,12 +1,9 @@
 #!/usr/bin/python3
 # -*- coding:utf-8 -*-
-# @Author : yhy&ddm&w4ter
+# @Author : anonymous520
 
-# 每3分钟检测一次githu
-# 是否有新的cve漏洞提交记录，若有则通过server酱和钉钉机器人推送,飞书捷径推送（二者配置一个即可）
-# 建议使用screen命令运行在自己的linux vps后台上，就可以愉快的接收各种cve了
-# https://my.oschina.net/u/4581868/blog/4380482
-# https://github.com/kiang70/Github-Monitor
+# 每3分钟检测一次github
+# 那就这样吧
 import json
 from collections import OrderedDict
 import requests, time, re
@@ -71,14 +68,13 @@ def create_database():
     try:
         cur.execute('''CREATE TABLE IF NOT EXISTS cve_monitor
                    (cve_name varchar(255),
-                    pushed_at varchar(255),
+                    pushed_at varchar(255)
                     cve_url varchar(255));''')
         print("成功创建CVE监控表")
         cur.execute('''CREATE TABLE IF NOT EXISTS keyword_monitor
                    (keyword_name varchar(255),
                     pushed_at varchar(255),
-                    keyword_url varchar(255),
-                    description varchar(255));''')
+                    keyword_url varchar(255));''')
         print("成功创建关键字监控表")
         cur.execute('''CREATE TABLE IF NOT EXISTS redteam_tools_monitor
                    (tools_name varchar(255),
@@ -158,15 +154,10 @@ def getKeywordNews(keyword):
             if keyword_url.split("/")[-2] not in black_user():
                 try:
                     keyword_name = json_str['items'][i]['name']
-                    # 处理为空异常
-                    try:
-                        description=json_str['items'][i]['description']
-                    except Exception as e:
-                        description = "作者未写描述"
                     pushed_at_tmp = json_str['items'][i]['created_at']
                     pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
                     if pushed_at == str(today_date):
-                        today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at,"description":description})
+                        today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at})
                         print("[+] keyword: {} ,{}".format(keyword, keyword_name))
                     else:
                         print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天".format(keyword, keyword_name, pushed_at))
@@ -194,8 +185,7 @@ def keyword_insert_into_sqlite3(data):
     for i in range(len(data)):
         try:
             keyword_name = data[i]['keyword_name']
-            description = data[i]['description']
-            cur.execute("INSERT INTO keyword_monitor (keyword_name,pushed_at,keyword_url,description) VALUES ('{}', '{}','{}','{}')".format(keyword_name, data[i]['pushed_at'], data[i]['keyword_url'],description))
+            cur.execute("INSERT INTO keyword_monitor (keyword_name,pushed_at,keyword_url) VALUES ('{}', '{}','{}')".format(keyword_name, data[i]['pushed_at'], data[i]['keyword_url']))
             print("keyword_insert_into_sqlite3 函数: {}插入数据成功！".format(keyword_name))
         except Exception as e:
             print("keyword_insert_into_sqlite3 error {}".format(e))
@@ -631,17 +621,14 @@ def sendNews(data):
 
 #发送信息到社交工具
 def sendKeywordNews(keyword, data):
+    description == data[i]['description']
     try:
         text = '有新的关键字监控 - {} - 送达! \r\n** 请自行分辨是否为红队钓鱼!!! **'.format(keyword)
         # 获取 cve 名字 ，根据cve 名字，获取描述，并翻译
         for i in range(len(data)):
             try:
                 keyword_name =  data[i]['keyword_name']
-                try:
-                    description = data[i]['description']
-                except Exception as e:
-                        description = "无"
-                body = "项目名称: " + keyword_name + "\r\n" + "Github地址: " + str(data[i]['keyword_url']) + "\r\n"+ "描述: " + "" + description
+                body = "项目名称: " + keyword_name + "\r\n" + "Github地址: " + str(data[i]['keyword_url']) + "\r\n"
                 if load_config()[0] == "dingding":
                     dingding(text, body, load_config()[2], load_config()[3])
                     print("钉钉 发送 CVE 成功")
