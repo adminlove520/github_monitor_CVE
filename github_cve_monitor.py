@@ -92,13 +92,13 @@ def create_database():
     conn.commit()  # 数据库存储在硬盘上需要commit  存储在内存中的数据库不需要
     conn.close()
     if load_config()[0] == "dingding":
-        dingding("test", "连接成功", load_config()[2], load_config()[3])
+        dingding("spaceX", "连接成功~", load_config()[2], load_config()[3])
     elif load_config()[0] == "server":
-        server("test", "连接成功", load_config()[2])
+        server("spaceX", "连接成功~", load_config()[2])
     elif load_config()[0] == "pushplus":
-        pushplus("test", "连接成功", load_config()[2])        
+        pushplus("spaceX", "连接成功~", load_config()[2])        
     elif load_config()[0] == "tgbot":
-        tgbot("test", "连接成功", load_config()[2], load_config()[3])
+        tgbot("spaceX", "连接成功~", load_config()[2], load_config()[3])
 #根据排序获取本年前20条CVE
 def getNews():
     today_cve_info_tmp = []
