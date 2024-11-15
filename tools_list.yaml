@@ -7,18 +7,22 @@ tools_list:
 keyword_list:
  - cve-2024
  - 免杀
- - poc/exp
- - 命令执行
- - 漏洞利用
- - 漏洞扫描
+ - 内网渗透
+ - 应急响应
  - 信息收集
- - 溯源反制
- - 内网横向/渗透
- - Burp插件
+ - 漏洞
+ - 渗透
+ - cobaltstrike
+ - shellcode
+ - red_team
+ - rce
+ - poc
+ - blue_team
+ - 远控
  - 综合利用工具
- - 信息泄露
- - RCE
- - 漏洞合集
+ - 绕过
+ - 暴力破解
+ - 红队
 
 user_list:
  - adminlove520

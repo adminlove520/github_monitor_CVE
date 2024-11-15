@@ -1,5 +1,5 @@
 all_config:
-#Github-token-2024年11月9日21:47:37
+#Github-token-提交代码千万不能携带提交！
  github_token: 
  dingding:
    - enable: 1
@@ -24,7 +24,7 @@ all_config:
    - token: 123456
    - app_name: pushplus
  translate:
-  - enable: 1
+  - enable: 0
  black_user:
    - AlAIAL90
    - cirosantilli

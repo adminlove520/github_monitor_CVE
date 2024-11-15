@@ -158,14 +158,18 @@ def getKeywordNews(keyword):
             if keyword_url.split("/")[-2] not in black_user():
                 try:
                     keyword_name = json_str['items'][i]['name']
-                    description=json_str['items'][i]['description']
+                    # 处理为空异常
+                    try:
+                        description=json_str['items'][i]['description']
+                    except Exception as e:
+                        description = "作者未写描述"
                     pushed_at_tmp = json_str['items'][i]['created_at']
                     pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
                     if pushed_at == str(today_date):
                         today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at,"description":description})
                         print("[+] keyword: {} ,{}".format(keyword, keyword_name))
                     else:
-                        print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天".format(keyword, keyword_name, pushed_at,description))
+                        print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天".format(keyword, keyword_name, pushed_at))
                 except Exception as e:
                     pass
             else:
@@ -680,7 +684,7 @@ if __name__ == '__main__':
         print("\r\n\t\t  关键字监控 \t\t\r\n")
         # 关键字监控 , 最好不要太多关键字，防止 github 次要速率限制  https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits=
         for keyword in keyword_list:
-             time.sleep(1)  # 每个关键字停 1s ，防止关键字过多导致速率限制
+             time.sleep(3)  # 每个关键字停 1s ，防止关键字过多导致速率限制
              keyword_data = getKeywordNews(keyword)
 
              if len(keyword_data) > 0:
