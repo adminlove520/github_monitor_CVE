@@ -3,8 +3,8 @@ all_config:
  github_token: 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
  dingding:
    - enable: 1
-   - webhook: https://oapi.dingtalk.com/robot/send?access_token=447fbd621c5c833eeee50b17e3ba750589090404291e493eab1256ee5b64d8cb
-   - secretKey: SECe560d776ac51b242388fb4af4eb9b479c76588482eeda173014971c0604c9360
+   - webhook: https://oapi.dingtalk.com/robot/send?access_token=d7cee571e9979ce0269bb7db9a42e806e50bfd06aedf0ff0a57988a74bbe63d1
+   - secretKey: SECd4aa7c2157189e21d68cffd37e20f6ab5175f6a4898558b6714453cbd6f79e29
    - app_name: dingding
  feishu:
    - enable: 0
@@ -24,6 +24,6 @@ all_config:
    - token: 123456
    - app_name: pushplus
  translate:
-  - enable: 0
+  - enable: 1
  black_user:
    - AlAIAL90
