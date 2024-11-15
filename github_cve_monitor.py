@@ -77,7 +77,8 @@ def create_database():
         cur.execute('''CREATE TABLE IF NOT EXISTS keyword_monitor
                    (keyword_name varchar(255),
                     pushed_at varchar(255),
-                    keyword_url varchar(255));''')
+                    keyword_url varchar(255),
+                    description varchar(255));''')
         print("成功创建关键字监控表")
         cur.execute('''CREATE TABLE IF NOT EXISTS redteam_tools_monitor
                    (tools_name varchar(255),
@@ -157,13 +158,14 @@ def getKeywordNews(keyword):
             if keyword_url.split("/")[-2] not in black_user():
                 try:
                     keyword_name = json_str['items'][i]['name']
+                    description=json_str['items'][i]['description']
                     pushed_at_tmp = json_str['items'][i]['created_at']
                     pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
                     if pushed_at == str(today_date):
-                        today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at})
+                        today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at,"description":description})
                         print("[+] keyword: {} ,{}".format(keyword, keyword_name))
                     else:
-                        print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天".format(keyword, keyword_name, pushed_at))
+                        print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天".format(keyword, keyword_name, pushed_at,description))
                 except Exception as e:
                     pass
             else:
@@ -188,7 +190,8 @@ def keyword_insert_into_sqlite3(data):
     for i in range(len(data)):
         try:
             keyword_name = data[i]['keyword_name']
-            cur.execute("INSERT INTO keyword_monitor (keyword_name,pushed_at,keyword_url) VALUES ('{}', '{}', '{}')".format(keyword_name, data[i]['pushed_at'], data[i]['keyword_url']))
+            description = data[i]['description']
+            cur.execute("INSERT INTO keyword_monitor (keyword_name,pushed_at,keyword_url,description) VALUES ('{}', '{}','{}','{}')".format(keyword_name, data[i]['pushed_at'], data[i]['keyword_url'],description))
             print("keyword_insert_into_sqlite3 函数: {}插入数据成功！".format(keyword_name))
         except Exception as e:
             print("keyword_insert_into_sqlite3 error {}".format(e))
@@ -630,7 +633,8 @@ def sendKeywordNews(keyword, data):
         for i in range(len(data)):
             try:
                 keyword_name =  data[i]['keyword_name']
-                body = "项目名称: " + keyword_name + "\r\n" + "Github地址: " + str(data[i]['keyword_url']) + "\r\n"
+                description = data[i]['description']
+                body = "项目名称: " + keyword_name + "\r\n" + "Github地址: " + str(data[i]['keyword_url']) + "\r\n"+ "描述: " + "" + description
                 if load_config()[0] == "dingding":
                     dingding(text, body, load_config()[2], load_config()[3])
                     print("钉钉 发送 CVE 成功")

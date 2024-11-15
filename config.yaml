@@ -1,6 +1,6 @@
 all_config:
 #Github-token-2024年11月9日21:47:37
- github_token: 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
+ github_token: 
  dingding:
    - enable: 1
    - webhook: https://oapi.dingtalk.com/robot/send?access_token=d7cee571e9979ce0269bb7db9a42e806e50bfd06aedf0ff0a57988a74bbe63d1
@@ -27,3 +27,7 @@ all_config:
   - enable: 1
  black_user:
    - AlAIAL90
+   - cirosantilli
+   - lTbgykio
+   - Dujltqzv
+   - Daravai1234
