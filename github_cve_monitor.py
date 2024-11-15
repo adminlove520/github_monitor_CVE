@@ -637,7 +637,11 @@ def sendKeywordNews(keyword, data):
         for i in range(len(data)):
             try:
                 keyword_name =  data[i]['keyword_name']
-                description = data[i]['description']
+                # 处理为空异常
+                    try:
+                        description = data[i]['description']
+                    except Exception as e:
+                        description = "作者未写描述"
                 body = "项目名称: " + keyword_name + "\r\n" + "Github地址: " + str(data[i]['keyword_url']) + "\r\n"+ "描述: " + "" + description
                 if load_config()[0] == "dingding":
                     dingding(text, body, load_config()[2], load_config()[3])
