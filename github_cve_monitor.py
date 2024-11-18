@@ -68,7 +68,7 @@ def create_database():
     try:
         cur.execute('''CREATE TABLE IF NOT EXISTS cve_monitor
                    (cve_name varchar(255),
-                    pushed_at varchar(255)
+                    pushed_at varchar(255),
                     cve_url varchar(255));''')
         print("成功创建CVE监控表")
         cur.execute('''CREATE TABLE IF NOT EXISTS keyword_monitor
@@ -621,7 +621,6 @@ def sendNews(data):
 
 #发送信息到社交工具
 def sendKeywordNews(keyword, data):
-    description == data[i]['description']
     try:
         text = '有新的关键字监控 - {} - 送达! \r\n** 请自行分辨是否为红队钓鱼!!! **'.format(keyword)
         # 获取 cve 名字 ，根据cve 名字，获取描述，并翻译
