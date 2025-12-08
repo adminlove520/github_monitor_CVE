@@ -5,7 +5,7 @@ tools_list:
   - https://api.github.com/repos/adysec/nuclei_poc
 
 keyword_list:
- - cve-2024
+ - cve-2025
  - 免杀
  - 内网渗透
  - 应急响应
