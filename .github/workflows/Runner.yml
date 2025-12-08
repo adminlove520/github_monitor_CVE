@@ -1,53 +1,57 @@
-name: GitHub-CVE
+name: GitHub-CVE-Monitor
 
 on:
   schedule:
-    - cron: '0/10 * * * *'
-  workflow_dispatch:
+    - cron: '*/3 * * * *'  # 每3分钟运行一次
+  workflow_dispatch:  # 支持手动触发
+  push:
+    branches: [ main ]  # 代码推送时触发
+    paths:
+      - 'github_cve_monitor.py'
+      - 'requirements.txt'
+      - '.github/workflows/Runner.yml'
+
 env:
   TZ: Asia/Shanghai
+  PYTHONIOENCODING: utf-8
 
 jobs:
   github_monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # 设置超时时间
+    
     steps:
-      - name: checkout
-        uses: actions/checkout@v3
-
-      - name: Set up Python3
-        uses: actions/setup-python@v2
+      - name: Checkout code
+        uses: actions/checkout@v4  # 使用最新版本
         with:
-          python-version: '3.9'
+          fetch-depth: 0  # 拉取所有历史记录
+          token: ${{ secrets.GH_TOKEN }}  # 使用个人访问令牌
 
-    #   - name: clean data
-    #     run: echo "CleanKeywords=$(cat ./clean.txt)" >> $GITHUB_ENV
+      - name: Set up Python
+        uses: actions/setup-python@v5  # 使用最新版本
+        with:
+          python-version: '3.10'  # 使用更新的Python版本
+          cache: 'pip'  # 缓存pip依赖
 
       - name: Install requirements
         run: |
-          python3 -m pip install --upgrade pip
-          pip3 install -r ./requirements.txt
+          python -m pip install --upgrade pip
+          pip install -r ./requirements.txt
       
-      - name: Run DFYX_Sec
+      - name: Run monitor script
         env:
            keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
-           github_token: ${{ secrets.GITHUB_TOKEN }}
-           secretKey: ${{ secrets.DINGDING_SECRETKEY }}
-           webhook: ${{ secrets.DINGDING_WEBHOOK }}
-        run: python3 ./github_cve_monitor.py
+           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+           DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
+           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
+        run: python ./github_cve_monitor.py
 
-    #   - name: test run
-    #     run: echo ${{ env.CleanKeywords }}
-
-      - name: commit update
-        run: |
-          run: |
-          git diff
-          git config --global user.email 791751568@qq.com
-          git config --global user.name adminlove520
-          git add archive today.md
-          git commit -m "每日安全漏洞更新（`date +'%Y-%m-%d'`）"
-
-      - name: Push changes
-        uses: ad-m/github-push-action@master
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9  # 使用更可靠的提交工具
         with:
-          github_token: ${{ secrets.GH_TOKEN }}
+          message: "每日安全漏洞更新（${{ env.GITHUB_ACTOR }}）"
+          add: "archive data.db"
+          author_name: "GitHub Actions"
+          author_email: "actions@github.com"
+          push: true
+          pull_strategy: NO-PULL
