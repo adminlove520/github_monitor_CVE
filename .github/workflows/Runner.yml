@@ -22,13 +22,13 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # 使用最新版本
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v4 对应的完整SHA
         with:
           fetch-depth: 0  # 拉取所有历史记录
           token: ${{ secrets.GH_TOKEN }}  # 使用个人访问令牌
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # 使用最新版本
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c  # v5 对应的完整SHA
         with:
           python-version: '3.10'  # 使用更新的Python版本
           cache: 'pip'  # 缓存pip依赖
@@ -47,7 +47,7 @@ jobs:
         run: python ./github_cve_monitor.py
 
       - name: Commit and push changes
-        uses: EndBug/add-and-commit@v9  # 使用更可靠的提交工具
+        uses: EndBug/add-and-commit@61a63993c7d83f1d91b5298411ff75737b08f253  # v9 对应的完整SHA
         with:
           message: "每日安全漏洞更新（${{ env.GITHUB_ACTOR }}）"
           add: "archive data.db"
