@@ -3,8 +3,8 @@ all_config:
  github_token: 
  dingding:
    - enable: 1
-   - webhook: https://oapi.dingtalk.com/robot/send?access_token=d7cee571e9979ce0269bb7db9a42e806e50bfd06aedf0ff0a57988a74bbe63d1
-   - secretKey: SECd4aa7c2157189e21d68cffd37e20f6ab5175f6a4898558b6714453cbd6f79e29
+   - webhook: https://oapi.dingtalk.com/robot/send?access_token=b33e5dbb84e62d703555d1d096d48ed8c130f30cb033f36dde214ced8cc82c1e
+   - secretKey: SECd7a5daa62add4729ae698b4d2bad51c6360fe53ee11ba0b7220c7111e2a6fb24
    - app_name: dingding
  feishu:
    - enable: 0
