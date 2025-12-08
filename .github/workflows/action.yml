@@ -28,11 +28,11 @@ jobs:
           pip3 install -r ./requirements.txt
       
       - name: Run DFYX_Sec
-        # env:
-        #   #keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
-        #   github_token: ${{ secrets.GITHUB_TOKEN }}
-        #   secretKey: ${{ secrets.DINGDING_SECRETKEY }}
-        #   webhook: ${{ secrets.DINGDING_WEBHOOK }}
+         env:
+           keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
+           github_token: ${{ secrets.GITHUB_TOKEN }}
+           secretKey: ${{ secrets.DINGDING_SECRETKEY }}
+           webhook: ${{ secrets.DINGDING_WEBHOOK }}
         run: python3 ./github_cve_monitor.py
 
     #   - name: test run
