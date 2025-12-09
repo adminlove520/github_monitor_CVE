@@ -218,9 +218,9 @@ def getNews():
                 if cve_url.split("/")[-2] not in black_user():
                     try:
                         cve_name_tmp = json_str['items'][i]['name'].upper()
-                        cve_name = re.findall('(CVE\-\d+\-\d+)', cve_name_tmp)[0].upper()
+                        cve_name = re.findall(r'(CVE\-\d+\-\d+)', cve_name_tmp)[0].upper()
                         pushed_at_tmp = json_str['items'][i]['created_at']
-                        pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
+                        pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
                         if pushed_at == str(today_date):
                             today_cve_info_tmp.append({"cve_name": cve_name, "cve_url": cve_url, "pushed_at": pushed_at})
                         else:
@@ -260,7 +260,7 @@ def getKeywordNews(keyword):
                     # 获取仓库描述
                     description = json_str['items'][i].get('description', '作者未写描述')
                     pushed_at_tmp = json_str['items'][i]['created_at']
-                    pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
+                    pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
                     if pushed_at == str(today_date):
                         today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at, "description": description})
                         print("[+] keyword: {} ,{}" .format(keyword, keyword_name))
@@ -311,7 +311,7 @@ def get_today_keyword_info(today_keyword_info_data):
     for i in range(len(today_keyword_info_data)):
         try:
             today_keyword_name = today_keyword_info_data[i]['keyword_name']
-            today_cve_name = re.findall('(CVE\-\d+\-\d+)', today_keyword_info_data[i]['keyword_name'].upper())
+            today_cve_name = re.findall(r'(CVE\-\d+\-\d+)', today_keyword_info_data[i]['keyword_name'].upper())
             # 如果仓库名字带有 cve-xxx-xxx, 先查询看看 cve 监控中是否存在, 防止重复推送
             if len(today_cve_name) > 0 and query_cve_info_database(today_cve_name.upper()) == 1: 
                 pass
@@ -333,7 +333,7 @@ def cve_insert_into_sqlite3(data):
     cur = conn.cursor()
     for i in range(len(data)):
         try:
-            cve_name = re.findall('(CVE\-\d+\-\d+)', data[i]['cve_name'])[0].upper()
+            cve_name = re.findall(r'(CVE\-\d+\-\d+)', data[i]['cve_name'])[0].upper()
             cur.execute("INSERT INTO cve_monitor (cve_name,pushed_at,cve_url) VALUES ('{}', '{}', '{}')".format(cve_name, data[i]['pushed_at'], data[i]['cve_url']))
             print("cve_insert_into_sqlite3 函数: {}插入数据成功！".format(cve_name))
         except Exception as e:
@@ -360,7 +360,7 @@ def get_today_cve_info(today_cve_info_data):
     # today_cve_info_data = getNews()
     for i in range(len(today_cve_info_data)):
         try:
-            today_cve_name = re.findall('(CVE\-\d+\-\d+)', today_cve_info_data[i]['cve_name'])[0].upper()
+            today_cve_name = re.findall(r'(CVE\-\d+\-\d+)', today_cve_info_data[i]['cve_name'])[0].upper()
             if exist_cve(today_cve_name) == 1:
                 Verify = query_cve_info_database(today_cve_name.upper())
                 if Verify == 0:
@@ -440,7 +440,7 @@ def get_pushed_at_time(tools_list):
         try:
             tools_json = http_session.get(url, headers=github_headers, timeout=10).json()
             pushed_at_tmp = tools_json['pushed_at']
-            pushed_at = re.findall('\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0] #获取的是API上的时间
+            pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0] #获取的是API上的时间
             tools_name = tools_json['name']
             api_url = tools_json['url']
             try:
@@ -492,7 +492,7 @@ def getUserRepos(user):
         today_date = datetime.date.today()
 
         for i in range(0, len(json_str)):
-            created_at = re.findall('\d{4}-\d{2}-\d{2}', json_str[i]['created_at'])[0]
+            created_at = re.findall(r'\d{4}-\d{2}-\d{2}', json_str[i]['created_at'])[0]
             if json_str[i]['fork'] == False and created_at == str(today_date):
                 Verify = user_insert_into_sqlite3(json_str[i]['full_name'])
                 print(json_str[i]['full_name'], Verify)
@@ -533,7 +533,7 @@ def send_body(url,query_pushed_at,query_tag_name):
     # 考虑到有的工具没有 releases, 则通过 commits 记录获取更新描述
     # 判断是否有 releases 记录
     json_str = http_session.get(url + '/releases', headers=github_headers, timeout=10).json()
-    new_pushed_at = re.findall('\d{4}-\d{2}-\d{2}', http_session.get(url, headers=github_headers, timeout=10).json()['pushed_at'])[0]
+    new_pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', http_session.get(url, headers=github_headers, timeout=10).json()['pushed_at'])[0]
     if len(json_str) != 0:
         tag_name = json_str[0]['tag_name']
         if query_pushed_at < new_pushed_at :
@@ -722,7 +722,7 @@ def sendNews(data):
         # 获取 cve 名字 ，根据cve 名字，获取描述，并翻译
         for i in range(len(data)):
             try:
-                cve_name = re.findall('(CVE\-\d+\-\d+)', data[i]['cve_name'])[0].upper()
+                cve_name = re.findall(r'(CVE\-\d+\-\d+)', data[i]['cve_name'])[0].upper()
                 cve_zh, cve_time = get_cve_des_zh(cve_name)
                 body = "CVE编号: " + cve_name + "  --- " + cve_time + " \r\n" + "Github地址: " + str(data[i]['cve_url']) + "\r\n" + "CVE描述: " + "\r\n" + cve_zh
                 if load_config()[0] == "dingding":
