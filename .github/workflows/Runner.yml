@@ -2,7 +2,8 @@ name: GitHub-CVE-Monitor
 
 on:
   schedule:
-    - cron: '*/3 * * * *'  # 每3分钟运行一次
+    # - cron: '*/3 * * * *'  # 每3分钟运行一次
+    - cron: '0 2 * * *'
   workflow_dispatch:  # 支持手动触发
   push:
     branches: [ main ]  # 代码推送时触发
