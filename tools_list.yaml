@@ -1,6 +1,4 @@
 tools_list:
-  - https://api.github.com/repos/EdgeSecurityTeam/Vulnerability
-  - https://api.github.com/repos/wy876/POC
   - https://api.github.com/repos/Threekiii/Awesome-POC
   - https://api.github.com/repos/adysec/nuclei_poc
 
