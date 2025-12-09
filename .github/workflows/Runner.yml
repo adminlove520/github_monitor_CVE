@@ -1,53 +1,55 @@
 name: GitHub-CVE-Monitor
 
+# 国际标准时间2点（北京时间10点）
 on:
   schedule:
-    # - cron: '*/3 * * * *'  # 每3分钟运行一次
     - cron: '0 2 * * *'
   workflow_dispatch:  # 支持手动触发
   push:
     branches: [ main ]  # 代码推送时触发
-    
-
-env:
-  TZ: Asia/Shanghai
-  PYTHONIOENCODING: utf-8
 
 jobs:
-  github_monitor:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # 设置超时时间
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # 拉取所有历史记录
-          token: ${{ secrets.GH_TOKEN }}  # 使用个人访问令牌
-
+      - uses: actions/checkout@v3
       - name: Set up Python
         uses: actions/setup-python@v3
         with:
-          python-version: '3.10'  # 使用更新的Python版本
-          cache: 'pip'  # 缓存pip依赖
-
-      - name: Install requirements
+          python-version: '3.x'
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r ./requirements.txt
-      
+
       - name: Run monitor script
         env:
-           keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
-           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-           DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
-           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
+          keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
+          DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
         run: python ./github_cve_monitor.py
 
-      - name: Commit and push changes
+      - name: Commit
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git diff
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
           git add archive data.db
-          git diff --quiet || git commit -m "每日安全漏洞更新（${{ env.GITHUB_ACTOR }}）"
-          git push
+          git commit -m "每日安全漏洞更新（`date +'%Y-%m-%d'`）"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GH_TOKEN }}
+
+  del_runs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 7
