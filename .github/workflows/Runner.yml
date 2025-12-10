@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984  # v3
         with:
           python-version: '3.x'
       - name: Install dependencies
@@ -28,6 +28,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
+          # 百度翻译环境变量支持
+          BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         run: python ./github_cve_monitor.py
 
       - name: Commit
@@ -39,7 +42,7 @@ jobs:
           git commit -m "每日安全漏洞更新（`date +'%Y-%m-%d'`）"
 
       - name: Push changes
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@057a6ba8261797610367c1f3c077ad4194b9455b  # master
         with:
           github_token: ${{ secrets.GH_TOKEN }}
 
@@ -47,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
+        uses: Mattraks/delete-workflow-runs@f35ef8120612b3426831a76e20f83735159b0b4b  # v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}

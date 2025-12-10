@@ -14,9 +14,32 @@ import yaml
 from lxml import etree
 import sqlite3
 
-# 配置requests会话，自动使用系统代理
+# 配置requests会话，添加重试机制和SSL优化
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from urllib3.exceptions import InsecureRequestWarning
+
+# 禁用不安全请求警告
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
 http_session = requests.Session()
-http_session.trust_env = True  # 自动使用系统代理
+
+# 配置重试策略，包括SSL错误重试
+retry_strategy = Retry(
+    total=3,  # 总重试次数
+    status_forcelist=[429, 500, 502, 503, 504],  # 触发重试的HTTP状态码
+    allowed_methods=["HEAD", "GET", "OPTIONS"],  # 允许重试的HTTP方法
+    backoff_factor=1,  # 重试间隔因子
+    raise_on_status=False
+)
+
+# 应用重试策略
+adapter = HTTPAdapter(max_retries=retry_strategy)
+http_session.mount("https://", adapter)
+http_session.mount("http://", adapter)
+
+# SSL配置优化
+http_session.verify = False  # 禁用SSL证书验证（解决证书问题导致的SSL:997错误）
 http_session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/vnd.github.v3+json'
@@ -87,6 +110,8 @@ def init_config():
                 except:
                     continue
     
+    
+    
     GLOBAL_CONFIG['push_channel']['type'] = push_channel
     
     # 根据推送渠道类型加载配置
@@ -143,6 +168,7 @@ def load_black_user():
             config = yaml.load(f, Loader=yaml.FullLoader)
             BLACK_USER_CACHE = config.get('all_config', {}).get('black_user', [])
         print(f"[+] 成功加载 {len(BLACK_USER_CACHE)} 个黑名单用户")
+        print(f"[+] 已启用黑名单配置，共 {len(BLACK_USER_CACHE)} 个用户")
     except Exception as e:
         print(f"[警告] 加载黑名单用户失败: {e}")
         BLACK_USER_CACHE = []
@@ -439,16 +465,24 @@ def get_pushed_at_time(tools_list):
     for url in tools_list:
         try:
             tools_json = http_session.get(url, headers=github_headers, timeout=10).json()
-            pushed_at_tmp = tools_json['pushed_at']
-            pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0] #获取的是API上的时间
-            tools_name = tools_json['name']
-            api_url = tools_json['url']
-            try:
-                releases_json = http_session.get(url+"/releases", headers=github_headers, timeout=10).json()
-                tag_name = releases_json[0]['tag_name']
-            except Exception as e:
-                tag_name = "no releases"
-            tools_info_list.append({"tools_name":tools_name,"pushed_at":pushed_at,"api_url":api_url,"tag_name":tag_name})
+            
+            # 检查关键字段是否存在
+            if 'pushed_at' in tools_json and 'name' in tools_json and 'url' in tools_json:
+                pushed_at_tmp = tools_json['pushed_at']
+                pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0] if pushed_at_tmp else datetime.date.today().strftime('%Y-%m-%d')
+                tools_name = tools_json['name']
+                api_url = tools_json['url']
+                
+                try:
+                    releases_json = http_session.get(url+"/releases", headers=github_headers, timeout=10).json()
+                    tag_name = releases_json[0]['tag_name'] if releases_json and len(releases_json) > 0 else "no releases"
+                except Exception as e:
+                    tag_name = "no releases"
+                
+                tools_info_list.append({"tools_name":tools_name,"pushed_at":pushed_at,"api_url":api_url,"tag_name":tag_name})
+            else:
+                print(f"[警告] API返回数据缺少关键字段: {url}")
+                print(f"[调试] API返回: {json.dumps(tools_json, ensure_ascii=False)[:100]}...")
         except Exception as e:
             print(f"get_pushed_at_time 处理 {url} 时出错: {e}")
             pass
@@ -625,44 +659,140 @@ def google_translate(word):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
         }
-        res = http_session.get(url=url, headers=headers, timeout=10)
+        # 缩短超时时间，避免长时间挂起
+        res = http_session.get(url=url, headers=headers, timeout=3)
+        res.raise_for_status()
         result_dict = res.json()
         result = ""
-        for item in result_dict[0]:
-            if item[0]:
-                result += item[0]
-        return result
+        # 增强JSON解析的健壮性
+        if isinstance(result_dict, list) and len(result_dict) > 0:
+            for item in result_dict[0]:
+                if isinstance(item, list) and len(item) > 0 and item[0]:
+                    result += item[0]
+        return result.strip() or word
     except Exception as e:
-        print(f"Google翻译失败，使用有道翻译: {e}")
-        return youdao_translate(word)
+        print(f"Google翻译失败，使用百度翻译: {e}")
+        return baidu_translate(word)
 
-# 有道翻译
-def youdao_translate(word):
+# 翻译结果缓存，避免重复翻译相同内容
+TRANSLATION_CACHE = {}
+# 上次API调用时间，用于控制访问频率
+LAST_TRANSLATE_TIME = 0
+# API调用最小间隔（毫秒）
+MIN_TRANSLATE_INTERVAL = 1000
+
+# 百度翻译实现
+def baidu_translate(word):
+    global LAST_TRANSLATE_TIME
+    
+    # 检查缓存，避免重复翻译
+    if word in TRANSLATION_CACHE:
+        return TRANSLATION_CACHE[word]
+    
     try:
-        # 简化的有道翻译API调用，使用更稳定的接口
-        url = f"https://fanyi.youdao.com/translate?&doctype=json&type=AUTO&i={requests.utils.quote(word)}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://fanyi.youdao.com/',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'zh-CN,zh;q=0.9',
+        import random
+        import hashlib
+        import time
+        import yaml
+        import os
+        
+        # 控制访问频率，避免54003错误
+        current_time = time.time() * 1000  # 转换为毫秒
+        if current_time - LAST_TRANSLATE_TIME < MIN_TRANSLATE_INTERVAL:
+            sleep_time = (MIN_TRANSLATE_INTERVAL - (current_time - LAST_TRANSLATE_TIME)) / 1000
+            time.sleep(sleep_time)
+        
+        # 从环境变量或配置文件读取百度翻译配置
+        baidu_app_id = os.environ.get('BAIDU_APP_ID', '')
+        baidu_secret_key = os.environ.get('BAIDU_SECRET_KEY', '')
+        
+        if not baidu_app_id or not baidu_secret_key:
+            # 从配置文件读取
+            try:
+                with open('config.yaml', 'r', encoding='utf-8') as f:
+                    config = yaml.load(f, Loader=yaml.FullLoader)
+                    baidu_config = config.get('all_config', {}).get('baidu_translate', [{}])[0]
+                    baidu_app_id = baidu_config.get('app_id', '')
+                    baidu_secret_key = baidu_config.get('secret_key', '')
+            except Exception as e:
+                print(f"[警告] 读取百度翻译配置失败: {e}")
+                return word
+        
+        # 检查配置是否完整
+        if not baidu_app_id or not baidu_secret_key:
+            print("[警告] 百度翻译配置不完整，无法进行翻译")
+            return word
+        
+        # 百度翻译API URL
+        url = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
+        
+        # 构建请求参数
+        salt = str(random.randint(32768, 65536))
+        sign_str = baidu_app_id + word + salt + baidu_secret_key
+        sign = hashlib.md5(sign_str.encode('utf-8')).hexdigest()
+        
+        params = {
+            'q': word,
+            'from': 'auto',
+            'to': 'zh',
+            'appid': baidu_app_id,
+            'salt': salt,
+            'sign': sign
         }
-        res = http_session.get(url=url, headers=headers, timeout=10)
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        # 发送请求
+        res = http_session.get(url=url, params=params, headers=headers, timeout=3)
+        LAST_TRANSLATE_TIME = time.time() * 1000  # 更新上次调用时间
+        res.raise_for_status()
         result_dict = res.json()
-        if 'translateResult' in result_dict:
+        
+        # 处理API响应
+        if 'trans_result' in result_dict:
             result = ""
-            for json_str in result_dict['translateResult'][0]:
-                tgt = json_str['tgt']
-                result += tgt
-            return result
-        return word
+            for item in result_dict['trans_result']:
+                if 'dst' in item:
+                    result += item['dst']
+            translated_result = result.strip() or word
+            # 缓存翻译结果
+            TRANSLATION_CACHE[word] = translated_result
+            return translated_result
+        elif 'error_code' in result_dict:
+            error_code = result_dict['error_code']
+            error_msg = result_dict.get('error_msg', '未知错误')
+            print(f"百度翻译API错误: {error_code} - {error_msg}")
+            if error_code == '54003':
+                print("[提示] 访问频率受限，请稍后再试")
+                # 对于54003错误，增加等待时间
+                time.sleep(2)
+            return word
+        else:
+            return word
     except Exception as e:
-        print(f"有道翻译失败: {e}")
+        print(f"百度翻译失败: {e}")
         return word
 
 # 主翻译函数，默认使用Google翻译
 def translate(word):
-    return google_translate(word)
+    # 先检查是否已经是中文，避免不必要的翻译
+    if re.search('[一-龥]', word):
+        return word
+    
+    # 尝试Google翻译
+    try:
+        return google_translate(word)
+    except Exception as e:
+        print(f"Google翻译失败，使用百度翻译: {e}")
+        # 尝试百度翻译
+        try:
+            return baidu_translate(word)
+        except Exception as e2:
+            print(f"百度翻译也失败: {e2}")
+            # 两次翻译都失败，返回原词
+            return word
 
 # 钉钉
 def dingding(text, msg,webhook,secretKey):
@@ -877,21 +1007,116 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     projects_str = '\n'.join(projects) if projects else '无'
     project_details_str = '\n'.join(project_details) if project_details else '无更新内容'
     
+    # 统计数量
+    cve_count = len(final_cve_data)
+    keyword_count = len(final_keyword_data)
+    tools_count = len(final_tools_data)
+    total_count = cve_count + keyword_count + tools_count
+    
+    # 构建更新关键词
+    keywords = []
+    tools_list, keyword_list, user_list = load_tools_list()
+    keywords.extend(keyword_list)
+    if final_cve_data:
+        keywords.append('CVE')
+    if final_tools_data:
+        keywords.append('红队工具')
+    keywords = list(set(keywords))
+    keywords_formatted = '\n'.join([f'- {kw}' for kw in keywords]) if keywords else '- 无'
+    
+    # 构建CVE列表和详情
+    cve_list = []
+    cve_details = []
+    if final_cve_data:
+        for item in final_cve_data:
+            # 处理字典类型数据
+            if isinstance(item, dict):
+                cve_name = item.get('cve_name', '未知CVE')
+                cve_url = item.get('cve_url', '')
+                pushed_at = item.get('pushed_at', today)
+            # 处理元组类型数据
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                cve_name, cve_url = item[0], item[1]
+                pushed_at = item[2] if len(item) >= 3 else today
+            else:
+                continue
+            
+            if cve_name and cve_url:
+                cve_list.append(f'- [{cve_name}]({cve_url})')
+                cve_details.append(f"### {cve_name}\n- GitHub地址: {cve_url}\n- 推送时间: {pushed_at}\n- 类型: CVE\n")
+    cve_list_str = '\n'.join(cve_list) if cve_list else '无CVE更新'
+    cve_details_str = '\n'.join(cve_details) if cve_details else '无CVE详情'
+    
+    # 构建关键字监控列表和详情
+    keyword_list_items = []
+    keyword_details = []
+    if final_keyword_data:
+        for item in final_keyword_data:
+            # 处理字典类型数据
+            if isinstance(item, dict):
+                keyword_name = item.get('keyword_name', '未知项目')
+                keyword_url = item.get('keyword_url', '')
+                pushed_at = item.get('pushed_at', today)
+            # 处理元组类型数据
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                keyword_name, keyword_url = item[0], item[1]
+                pushed_at = item[2] if len(item) >= 3 else today
+            else:
+                continue
+            
+            if keyword_name and keyword_url:
+                keyword_list_items.append(f'- [{keyword_name}]({keyword_url})')
+                keyword_details.append(f"### {keyword_name}\n- GitHub地址: {keyword_url}\n- 推送时间: {pushed_at}\n- 类型: 关键字监控\n")
+    keyword_list_str = '\n'.join(keyword_list_items) if keyword_list_items else '无关键字监控更新'
+    keyword_details_str = '\n'.join(keyword_details) if keyword_details else '无关键字监控详情'
+    
+    # 构建红队工具列表和详情
+    tools_list_items = []
+    tools_details = []
+    if final_tools_data:
+        for item in final_tools_data:
+            # 处理字典类型数据
+            if isinstance(item, dict):
+                tools_name = item.get('tools_name', '未知工具')
+                api_url = item.get('api_url', '')
+                tag_name = item.get('tag_name', 'no releases')
+                pushed_at = item.get('pushed_at', today)
+            # 处理元组类型数据
+            elif isinstance(item, (list, tuple)) and len(item) >= 1:
+                tools_name = item[0]
+                pushed_at = item[1] if len(item) >= 2 else today
+                tag_name = item[2] if len(item) >= 3 else 'no releases'
+                api_url = f"https://github.com/search?q={tools_name}"
+            else:
+                continue
+            
+            if tools_name:
+                tools_list_items.append(f'- [{tools_name}]({api_url})')
+                tools_details.append(f"### {tools_name}\n- GitHub地址: {api_url}\n- 推送时间: {pushed_at}\n- 版本: {tag_name}\n- 类型: 红队工具\n")
+    tools_list_str = '\n'.join(tools_list_items) if tools_list_items else '无红队工具更新'
+    tools_details_str = '\n'.join(tools_details) if tools_details else '无红队工具详情'
+    
+    # 构建知识库标签
+    tags = ['GitHub监控', 'CVE', '红队工具', '安全资讯']
+    tags.extend(keywords)
+    tags = list(set(tags))
+    tags_formatted = '\n'.join([f'- {tag}' for tag in tags]) if tags else '- GitHub监控'
+    
     # 填充模板
-    report_content = template.replace('当日情报_YYYY-MM-DD', f'当日情报_{today}')
-    
-    # 处理不同操作系统的换行符
-    report_content = report_content.replace('## 【更新关键词】\r\n', f'## 【更新关键词】\r\n{keywords_str}\r\n')
-    report_content = report_content.replace('## 【更新关键词】\n', f'## 【更新关键词】\n{keywords_str}\n')
-    
-    report_content = report_content.replace('## 【项目名称】\r\n', f'## 【项目名称】\r\n{projects_str}\r\n')
-    report_content = report_content.replace('## 【项目名称】\n', f'## 【项目名称】\n{projects_str}\n')
-    
-    report_content = report_content.replace('## 【项目描述】\r\n', f'## 【项目描述】\r\n{project_details_str}\r\n')
-    report_content = report_content.replace('## 【项目描述】\n', f'## 【项目描述】\n{project_details_str}\n')
-    
-    report_content = report_content.replace('## 【Github地址】\r\n- [仓库名称](仓库地址)', f'## 【Github地址】\r\n{projects_str}')
-    report_content = report_content.replace('## 【Github地址】\n- [仓库名称](仓库地址)', f'## 【Github地址】\n{projects_str}')
+    report_content = template
+    report_content = report_content.replace('当日情报_YYYY-MM-DD', f'当日情报_{today}')
+    report_content = report_content.replace('{total_count}', str(total_count))
+    report_content = report_content.replace('{cve_count}', str(cve_count))
+    report_content = report_content.replace('{keyword_count}', str(keyword_count))
+    report_content = report_content.replace('{tools_count}', str(tools_count))
+    report_content = report_content.replace('{keywords}', keywords_formatted)
+    report_content = report_content.replace('{cve_list}', cve_list_str)
+    report_content = report_content.replace('{keyword_list}', keyword_list_str)
+    report_content = report_content.replace('{tools_list}', tools_list_str)
+    report_content = report_content.replace('{cve_details}', cve_details_str)
+    report_content = report_content.replace('{keyword_details}', keyword_details_str)
+    report_content = report_content.replace('{tools_details}', tools_details_str)
+    report_content = report_content.replace('{tags}', tags_formatted)
     
     # 保存报告
     with open(report_path, 'w', encoding='utf-8') as f:
@@ -905,8 +1130,14 @@ if __name__ == '__main__':
     print("cve 、github 工具 和 大佬仓库 监控中 ...")
     #初始化部分
     create_database()
-
-    while True:
+    # 主动加载黑名单配置，确保日志显示
+    load_black_user()
+    
+    # 检查是否在GitHub Actions环境中运行
+    is_github_actions = os.environ.get('GITHUB_ACTIONS') == 'true'
+    
+    # 如果在GitHub Actions中，只执行一次
+    if is_github_actions:
         tools_list, keyword_list, user_list = load_tools_list()
         tools_data = get_pushed_at_time(tools_list)
         tools_insert_into_sqlite3(tools_data)   # 获取文件中的工具列表，并从 github 获取相关信息，存储下来
@@ -951,5 +1182,53 @@ if __name__ == '__main__':
         # 生成日报，传入运行结果数据
         generate_daily_report(today_cve_data, all_today_keyword_data, data3)
 
-        print("\r\n\t\t  等待下一次监控... \t\t\r\n")
-        time.sleep(5*60)
+        print("\r\n\t\t  监控完成！ \t\t\r\n")
+    else:
+        # 本地运行时，循环执行
+        while True:
+            tools_list, keyword_list, user_list = load_tools_list()
+            tools_data = get_pushed_at_time(tools_list)
+            tools_insert_into_sqlite3(tools_data)   # 获取文件中的工具列表，并从 github 获取相关信息，存储下来
+
+            print("\r\n\t\t  用户仓库监控 \t\t\r\n")
+            for user in user_list:
+                getUserRepos(user)
+            #CVE部分
+            print("\r\n\t\t  CVE 监控 \t\t\r\n")
+            cve_data = getNews()
+            today_cve_data = []
+            if len(cve_data) > 0 :
+                today_cve_data = get_today_cve_info(cve_data)
+                sendNews(today_cve_data)
+                cve_insert_into_sqlite3(today_cve_data)
+
+            print("\r\n\t\t  关键字监控 \t\t\r\n")
+            # 关键字监控 , 最好不要太多关键字，防止 github 次要速率限制  https://docs.github.com/en/rest/overview/resources-in-the-rest-api#secondary-rate-limits=
+            all_today_keyword_data = []
+            for keyword in keyword_list:
+                 time.sleep(3)  # 每个关键字停 1s ，防止关键字过多导致速率限制
+                 keyword_data = getKeywordNews(keyword)
+
+                 if len(keyword_data) > 0:
+                    today_keyword_data = get_today_keyword_info(keyword_data)
+                    if len(today_keyword_data) > 0:
+                        sendKeywordNews(keyword, today_keyword_data)
+                        keyword_insert_into_sqlite3(today_keyword_data)
+                        all_today_keyword_data.extend(today_keyword_data)
+            
+            # 红队工具监控
+            print("\r\n\t\t  红队工具监控 \t\t\r\n")
+            tools_list_new, keyword_list, user_list = load_tools_list()
+            data2 = get_pushed_at_time(tools_list_new)      # 再次从文件中获取工具列表，并从 github 获取相关信息,
+            data3 = get_tools_update_list(data2)        # 与 3 分钟前数据进行对比，如果在三分钟内有新增工具清单或者工具有更新则通知一下用户
+            for i in range(len(data3)):
+                try:
+                    send_body(data3[i]['api_url'],data3[i]['pushed_at'],data3[i]['tag_name'])
+                except Exception as e:
+                    print("main函数 try循环 遇到错误-->{}" .format(e))
+            
+            # 生成日报，传入运行结果数据
+            generate_daily_report(today_cve_data, all_today_keyword_data, data3)
+
+            print("\r\n\t\t  等待下一次监控... \t\t\r\n")
+            time.sleep(5*60)
