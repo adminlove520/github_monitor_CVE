@@ -12,9 +12,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab  # v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@13ae5bb136fac2878aff31522b9efb785519f984  # v3
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - name: Install dependencies
@@ -24,7 +24,7 @@ jobs:
 
       - name: Run monitor script
         env:
-          keywords: 'CVE SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
+          keywords: 'CVE-2025 SQL注入 RCE CNVD 未授权 命令执行 安全工具 ATT&CK poc exp 安卓安全 信息安全 python安全 java安全 web安全 云安全 区块链安全 工控安全 应急响应 安全检测 后渗透 Linux安全 远控免杀 资产测绘 渗透测试 漏洞扫描 内网渗透 代码审计 XSS漏洞 漏洞挖掘 Kubernetes攻防 指纹识别 红队工具 蜜罐 钓鱼 威胁情报 CMS漏洞 信息泄漏 信息收集 安全研究 逆向分析'
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}

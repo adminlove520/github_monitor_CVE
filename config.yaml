@@ -4,14 +4,14 @@
 all_config:
   # GitHub Token - 用于访问GitHub API
   # 请将此值设置为GitHub Secrets，不要直接提交到代码库
-  github_token: 
+  github_token: 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
 
   # 消息推送配置
   # 只需要启用一个推送渠道即可
   dingding:
     - enable: 1          # 1=启用，0=禁用
-    - webhook: https://oapi.dingtalk.com/robot/send?access_token=
-    - secretKey: 
+    - webhook: https://oapi.dingtalk.com/robot/send?access_token=b33e5dbb84e62d703555d1d096d48ed8c130f30cb033f36dde214ced8cc82c1e
+    - secretKey: SECd7a5daa62add4729ae698b4d2bad51c6360fe53ee11ba0b7220c7111e2a6fb24
     - app_name: dingding
   
   feishu:
@@ -29,8 +29,14 @@ all_config:
   translate:
     - enable: 0          # 1=启用，0=禁用
     # 启用后将翻译仓库描述等内容
-    # 默认使用Google翻译，失败时自动降级到有道翻译
-
+    # 默认使用Google翻译，失败时自动降级到百度翻译
+  
+  # 百度翻译配置
+  baidu_translate:
+    - app_id: 20221219001501937
+    - secret_key: 48hASIE0NLW6DuXdYZMV
+    - api_key: kFHH_d4sjudj9ujp3v3aet900
+  
   # 黑名单配置
   # 用于屏蔽垃圾用户和仓库
   # 从 https://github.com/BonjourFeng/Github-Search-Purification/blob/main/script.js 获取并定期更新
