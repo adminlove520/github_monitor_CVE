@@ -40,6 +40,7 @@ all_config:
   # 用于屏蔽垃圾用户和仓库
   # 从 https://github.com/BonjourFeng/Github-Search-Purification/blob/main/script.js 获取并定期更新
   black_user:
+    - GreenHand0001
     - cirosantilli
     - wumaoland
     - codin-stuffs
