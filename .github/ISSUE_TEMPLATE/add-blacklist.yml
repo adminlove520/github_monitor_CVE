@@ -1,0 +1,35 @@
+name: 添加黑名单用户
+description: 用于添加新的黑名单用户到监控系统
+labels: ["blacklist"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请按照以下格式添加黑名单用户，系统会自动处理并更新配置文件。
+        
+        **支持的格式：**
+        - 逗号分隔：`user1, user2, user3`
+        - 每行一个：
+          ```
+          user1
+          user2
+          user3
+          ```
+  - type: textarea
+    id: blacklist-users
+    attributes:
+      label: 黑名单用户列表
+      description: 请输入要添加的黑名单用户名，每个用户名一行或用逗号分隔
+      placeholder: |
+        user1, user2, user3
+        user4
+        user5
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 确认
+      options:
+        - label: 我确认这些用户确实需要被添加到黑名单
+          required: true

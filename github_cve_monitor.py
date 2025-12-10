@@ -942,6 +942,55 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     final_keyword_data = keyword_data if keyword_data else db_keyword_data
     final_tools_data = tools_update_data if tools_update_data else db_tools_data
     
+    # 去重处理 - 确保当日日报只包含唯一数据
+    # CVE去重
+    unique_cve = []
+    cve_seen = set()
+    if final_cve_data:
+        for item in final_cve_data:
+            # 生成唯一标识
+            if isinstance(item, dict):
+                key = f"{item.get('cve_name', '')}_{item.get('cve_url', '')}"
+            else:
+                key = f"{item[0]}_{item[1]}"
+            
+            if key not in cve_seen:
+                cve_seen.add(key)
+                unique_cve.append(item)
+    final_cve_data = unique_cve
+    
+    # 关键字监控去重
+    unique_keyword = []
+    keyword_seen = set()
+    if final_keyword_data:
+        for item in final_keyword_data:
+            # 生成唯一标识
+            if isinstance(item, dict):
+                key = f"{item.get('keyword_name', '')}_{item.get('keyword_url', '')}"
+            else:
+                key = f"{item[0]}_{item[1]}"
+            
+            if key not in keyword_seen:
+                keyword_seen.add(key)
+                unique_keyword.append(item)
+    final_keyword_data = unique_keyword
+    
+    # 红队工具去重
+    unique_tools = []
+    tools_seen = set()
+    if final_tools_data:
+        for item in final_tools_data:
+            # 生成唯一标识
+            if isinstance(item, dict):
+                key = f"{item.get('tools_name', '')}"
+            else:
+                key = f"{item[0]}"
+            
+            if key not in tools_seen:
+                tools_seen.add(key)
+                unique_tools.append(item)
+    final_tools_data = unique_tools
+    
     # 构建更新关键词
     keywords = []
     tools_list, keyword_list, user_list = load_tools_list()
@@ -1122,8 +1171,56 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(report_content)
     
+    # 创建GitHub Issue
+    create_github_issue(today, report_content)
+    
     print(f"日报已生成: {report_path}")
     return report_path
+
+# 创建GitHub Issue
+def create_github_issue(title, body):
+    import os
+    import requests
+    
+    # 获取GitHub Token
+    github_token = os.environ.get('GITHUB_TOKEN')
+    if not github_token:
+        print("[+] No GITHUB_TOKEN found, skipping GitHub issue creation")
+        return
+    
+    # 获取仓库信息
+    repo_full_name = os.environ.get('GITHUB_REPOSITORY')
+    if not repo_full_name:
+        print("[+] No GITHUB_REPOSITORY found, skipping GitHub issue creation")
+        return
+    
+    # GitHub API URL
+    url = f"https://api.github.com/repos/{repo_full_name}/issues"
+    
+    # 请求头
+    headers = {
+        'Authorization': f'token {github_token}',
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GitHub-Monitor-Script'
+    }
+    
+    # 请求数据
+    data = {
+        'title': f'当日情报_{title}',
+        'body': body,
+        'labels': ['日报', '自动生成']
+    }
+    
+    try:
+        # 发送请求
+        response = requests.post(url, json=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        issue = response.json()
+        print(f"[+] Created GitHub issue: {issue['html_url']}")
+    except requests.exceptions.HTTPError as e:
+        print(f"[-] HTTP error creating GitHub issue: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        print(f"[-] Failed to create GitHub issue: {e}")
 
 #main函数
 if __name__ == '__main__':

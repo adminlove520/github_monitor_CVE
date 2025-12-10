@@ -3,7 +3,7 @@ name: GitHub-Monitor
 # 国际标准时间2点（北京时间10点）
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:  # 支持手动触发
   push:
     branches: [ main ]  # 代码推送时触发

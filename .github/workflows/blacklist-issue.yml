@@ -1,0 +1,75 @@
+name: Blacklist Management
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+jobs:
+  update-blacklist:
+    runs-on: ubuntu-latest
+    if: github.event.issue.title == '添加黑名单用户' || contains(github.event.comment.body, '/add-blacklist')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+      
+      - name: Update blacklist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body || github.event.comment.body }}
+        run: python ./update_blacklist.py
+      
+      - name: Commit and Push Changes
+        id: commit
+        run: |
+          git diff --quiet
+          if [ $? -ne 0 ]; then
+            git config --global user.email "actions@github.com"
+            git config --global user.name "GitHub Actions"
+            git add config.yaml
+            git commit -m "Update blacklist from issue #${{ github.event.issue.number }}"
+            git push origin main
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes to commit" >&2
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Comment and Close Issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const changed = '${{ steps.commit.outputs.changed }}' === 'true';
+            let commentBody = '';
+            
+            if (changed) {
+              commentBody = '✅ 黑名单用户已成功添加到配置文件！';
+            } else {
+              commentBody = 'ℹ️ 没有添加新的黑名单用户，所有用户已存在于黑名单中。';
+            }
+            
+            // 回复用户
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }},
+              body: commentBody
+            });
+            
+            // 关闭issue
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }},
+              state: 'closed'
+            });
