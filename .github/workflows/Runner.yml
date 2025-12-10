@@ -42,7 +42,7 @@ jobs:
           git commit -m "每日安全漏洞更新（`date +'%Y-%m-%d'`）"
 
       - name: Push changes
-        uses: ad-m/github-push-action@057a6ba8261797610367c1f3c077ad4194b9455b  # master
+        uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GH_TOKEN }}
 
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@f35ef8120612b3426831a76e20f83735159b0b4b  # v2
+        uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}

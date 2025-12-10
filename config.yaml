@@ -35,7 +35,6 @@ all_config:
   baidu_translate:
     - app_id: 20221219001501937
     - secret_key: 48hASIE0NLW6DuXdYZMV
-    - api_key: kFHH_d4sjudj9ujp3v3aet900
   
   # 黑名单配置
   # 用于屏蔽垃圾用户和仓库

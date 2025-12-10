@@ -35,7 +35,6 @@ all_config:
   baidu_translate:
     - app_id: 
     - secret_key: 
-    - api_key: 
   
   # 黑名单配置
   # 用于屏蔽垃圾用户和仓库
