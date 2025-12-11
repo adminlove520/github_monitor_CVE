@@ -1194,8 +1194,8 @@ def create_github_issue(title, body):
         print("[+] No GITHUB_REPOSITORY found, skipping GitHub issue creation")
         return
     
-    # GitHub API URL
-    url = f"https://api.github.com/repos/{repo_full_name}/issues"
+    # 定义issue标题
+    issue_title = f'当日情报_{title}'
     
     # 请求头
     headers = {
@@ -1204,23 +1204,51 @@ def create_github_issue(title, body):
         'User-Agent': 'GitHub-Monitor-Script'
     }
     
-    # 请求数据
-    data = {
-        'title': f'当日情报_{title}',
-        'body': body,
-        'labels': ['日报', '自动生成']
-    }
+    # GitHub API URL
+    repo_url = f"https://api.github.com/repos/{repo_full_name}"
     
     try:
-        # 发送请求
-        response = requests.post(url, json=data, headers=headers, timeout=10)
+        # 1. 检查是否已存在当日的日报issue
+        search_url = f"{repo_url}/issues"
+        search_params = {
+            'state': 'all',
+            'title': issue_title,
+            'labels': '日报,自动生成',
+            'per_page': 1
+        }
+        
+        # 发送搜索请求
+        response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
         response.raise_for_status()
-        issue = response.json()
-        print(f"[+] Created GitHub issue: {issue['html_url']}")
+        existing_issues = response.json()
+        
+        if existing_issues and len(existing_issues) > 0:
+            # 2. 如果已存在，更新issue内容
+            existing_issue = existing_issues[0]
+            issue_url = f"{repo_url}/issues/{existing_issue['number']}"
+            update_data = {
+                'body': body
+            }
+            response = requests.patch(issue_url, json=update_data, headers=headers, timeout=10)
+            response.raise_for_status()
+            updated_issue = response.json()
+            print(f"[+] Updated existing GitHub issue: {updated_issue['html_url']}")
+        else:
+            # 3. 如果不存在，创建新issue
+            create_url = f"{repo_url}/issues"
+            create_data = {
+                'title': issue_title,
+                'body': body,
+                'labels': ['日报', '自动生成']
+            }
+            response = requests.post(create_url, json=create_data, headers=headers, timeout=10)
+            response.raise_for_status()
+            new_issue = response.json()
+            print(f"[+] Created new GitHub issue: {new_issue['html_url']}")
     except requests.exceptions.HTTPError as e:
-        print(f"[-] HTTP error creating GitHub issue: {e.response.status_code} - {e.response.text}")
+        print(f"[-] HTTP error with GitHub issue: {e.response.status_code} - {e.response.text}")
     except Exception as e:
-        print(f"[-] Failed to create GitHub issue: {e}")
+        print(f"[-] Failed to process GitHub issue: {e}")
 
 #main函数
 if __name__ == '__main__':

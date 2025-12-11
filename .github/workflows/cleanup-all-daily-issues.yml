@@ -1,0 +1,123 @@
+name: Cleanup All Daily Issues
+
+on:
+  workflow_dispatch:  # 仅支持手动触发
+    inputs:
+      dry-run:
+        description: 'Dry run mode - only show what would be deleted, don''t actually delete anything'
+        required: true
+        default: 'true'
+
+jobs:
+  cleanup-all-daily-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup all daily report issues
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const dryRun = `${{ github.event.inputs.dry-run }}` === 'true';
+            console.log(`Running in ${dryRun ? 'dry run' : 'production'} mode`);
+            
+            // 定义要查找的标签和标题前缀
+            const labels = ['日报', '自动生成'];
+            const titlePrefix = '当日情报_';
+            
+            // 获取所有日报issue
+            let allIssues = [];
+            let page = 1;
+            let hasMore = true;
+            
+            // 分页获取所有日报issue
+            while (hasMore) {
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'all',
+                labels: labels.join(','),
+                per_page: 100,
+                page: page
+              });
+              
+              if (issues.data && issues.data.length > 0) {
+                allIssues = allIssues.concat(issues.data);
+                page++;
+              } else {
+                hasMore = false;
+              }
+            }
+            
+            // 过滤出所有日报issue（标题以"当日情报_"开头）
+            const dailyIssues = allIssues.filter(issue => {
+              return issue.title.startsWith(titlePrefix);
+            });
+            
+            console.log(`Found ${dailyIssues.length} daily report issues`);
+            
+            // 按标题排序（从旧到新）
+            dailyIssues.sort((a, b) => {
+              return a.title.localeCompare(b.title);
+            });
+            
+            // 显示要清理的issue
+            console.log('Issues to process:');
+            dailyIssues.forEach(issue => {
+              console.log(`- #${issue.number}: ${issue.title} (${issue.state})`);
+            });
+            
+            if (dryRun) {
+              console.log(`\nDRY RUN COMPLETE: Would have processed ${dailyIssues.length} issues`);
+              return;
+            }
+            
+            // 实际清理issue
+            console.log(`\nStarting cleanup of ${dailyIssues.length} issues...`);
+            let processedCount = 0;
+            let errorCount = 0;
+            
+            for (const issue of dailyIssues) {
+              try {
+                console.log(`Processing issue #${issue.number}: ${issue.title}`);
+                
+                // 关闭issue（如果尚未关闭）
+                if (issue.state !== 'closed') {
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    state: 'closed'
+                  });
+                  console.log(`  ✅ Closed issue`);
+                }
+                
+                // 锁定issue
+                try {
+                  await github.rest.issues.lock({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    lock_reason: 'resolved'
+                  });
+                  console.log(`  ✅ Locked issue`);
+                } catch (lockError) {
+                  if (lockError.status === 422) {
+                    console.log(`  ⚠️ Issue already locked`);
+                  } else {
+                    throw lockError;
+                  }
+                }
+                
+                processedCount++;
+                console.log(`  ✅ Issue #${issue.number} processed successfully`);
+              } catch (error) {
+                console.error(`  ❌ Failed to process issue #${issue.number}: ${error.message}`);
+                errorCount++;
+              }
+            }
+            
+            console.log(`\nCLEANUP COMPLETE:`);
+            console.log(`- Total issues found: ${dailyIssues.length}`);
+            console.log(`- Successfully processed: ${processedCount}`);
+            console.log(`- Failed to process: ${errorCount}`);
+            console.log(`- Final status: ${processedCount} issues closed and locked`);
+            return `${processedCount} issues closed and locked, ${errorCount} failed`;

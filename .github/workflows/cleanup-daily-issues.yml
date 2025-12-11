@@ -1,0 +1,85 @@
+name: Cleanup Daily Issues
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天凌晨执行
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  cleanup-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup old daily report issues
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // 获取当前日期
+            const now = new Date();
+            const currentDate = now.toISOString().split('T')[0]; // 格式：YYYY-MM-DD
+            const currentIssueTitle = `当日情报_${currentDate}`;
+            
+            console.log(`Current date: ${currentDate}`);
+            console.log(`Current issue title: ${currentIssueTitle}`);
+            
+            // 定义要查找的标签
+            const labels = ['日报', '自动生成'];
+            
+            // 获取所有日报issue
+            let allIssues = [];
+            let page = 1;
+            let hasMore = true;
+            
+            // 分页获取所有日报issue
+            while (hasMore) {
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'all',
+                labels: labels.join(','),
+                per_page: 100,
+                page: page
+              });
+              
+              if (issues.data && issues.data.length > 0) {
+                allIssues = allIssues.concat(issues.data);
+                page++;
+              } else {
+                hasMore = false;
+              }
+            }
+            
+            console.log(`Total daily issues found: ${allIssues.length}`);
+            
+            // 过滤出需要清理的旧日报issue
+            const oldIssues = allIssues.filter(issue => {
+              // 检查是否是日报issue，标题格式为 "当日情报_YYYY-MM-DD"
+              const isDailyIssue = issue.title.startsWith('当日情报_');
+              const isCurrentIssue = issue.title === currentIssueTitle;
+              return isDailyIssue && !isCurrentIssue;
+            });
+            
+            console.log(`Old daily issues to cleanup: ${oldIssues.length}`);
+            
+            // 关闭并锁定旧日报issue
+            for (const issue of oldIssues) {
+              console.log(`Cleaning up issue: #${issue.number} - ${issue.title}`);
+              
+              // 关闭issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+              
+              // 锁定issue
+              await github.rest.issues.lock({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                lock_reason: 'resolved'
+              });
+            }
+            
+            console.log(`Cleanup completed: ${oldIssues.length} old daily issues processed`);
+            return `${oldIssues.length} old daily issues closed and locked`;
