@@ -573,15 +573,19 @@ def get_today_cve_info(today_cve_info_data):
     for i in range(len(today_cve_info_data)):
         try:
             today_cve_name = re.findall(r'(CVE\-\d+\-\d+)', today_cve_info_data[i]['cve_name'])[0].upper()
-            if exist_cve(today_cve_name) == 1:
-                Verify = query_cve_info_database(today_cve_name.upper())
-                if Verify == 0:
-                    print("[+] 数据库里不存在{}".format(today_cve_name.upper()))
-                    today_all_cve_info.append(today_cve_info_data[i])
-                else:
-                    print("[-] 数据库里存在{}".format(today_cve_name.upper()))
+            
+            # 检查CVE是否存在于数据库中，避免重复推送
+            Verify = query_cve_info_database(today_cve_name.upper())
+            if Verify == 0:
+                print("[+] 数据库里不存在{}".format(today_cve_name.upper()))
+                today_all_cve_info.append(today_cve_info_data[i])
+            else:
+                print("[-] 数据库里存在{}".format(today_cve_name.upper()))
         except Exception as e:
+            print(f"[-] 处理CVE {today_cve_info_data[i].get('cve_name', '未知')} 时出错: {e}")
             pass
+    
+    logger.info(f"get_today_cve_info 返回 {len(today_all_cve_info)} 条CVE信息")
     return today_all_cve_info
 #获取红队工具信息插入到数据库
 def tools_insert_into_sqlite3(data):
@@ -1363,9 +1367,9 @@ def get_special_keyword_news(keyword):
     
     return today_special_news
 
-# 根据cve 名字，获取描述，并翻译
+#根据cve 名字，获取描述，并翻译
 def get_cve_des_zh(cve):
-    time.sleep(3)
+    """获取CVE描述并翻译"""
     try:
         query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
         response = http_session.get(query_cve_url, timeout=10)
@@ -1373,38 +1377,60 @@ def get_cve_des_zh(cve):
         des = html.xpath('//*[@id="GeneratedTable"]/table//tr[4]/td/text()')[0].strip()
         cve_time = html.xpath('//*[@id="GeneratedTable"]/table//tr[11]/td[1]/b/text()')[0].strip()
         if load_config()[-1]:
-            return translate(des)
+            translated_des = translate(des)
+            return translated_des, cve_time
         return des, cve_time
     except Exception as e:
-        pass
+        logger.error(f"获取CVE {cve} 描述失败: {e}")
+        # 如果获取失败，返回默认值
+        return "无法获取CVE描述", "未知时间"
+
 #发送CVE信息到社交工具
 def sendNews(data):
+    """发送CVE信息到配置的推送渠道"""
     try:
         text = '有新的CVE送达! \r\n** 请自行分辨是否为红队钓鱼!!! **'
+        logger.info(f"开始发送 {len(data)} 条CVE信息")
+        
         # 获取 cve 名字 ，根据cve 名字，获取描述，并翻译
         for i in range(len(data)):
             try:
-                cve_name = re.findall(r'(CVE\-\d+\-\d+)', data[i]['cve_name'])[0].upper()
+                cve_item = data[i]
+                cve_name = re.findall(r'(CVE\-\d+\-\d+)', cve_item['cve_name'])[0].upper()
+                
+                # 获取CVE描述
                 cve_zh, cve_time = get_cve_des_zh(cve_name)
-                body = "CVE编号: " + cve_name + "  --- " + cve_time + " \r\n" + "Github地址: " + str(data[i]['cve_url']) + "\r\n" + "CVE描述: " + "\r\n" + cve_zh
-                if load_config()[0] == "dingding":
+                
+                # 构建推送内容
+                body = "CVE编号: " + cve_name + "  --- " + cve_time + " \r\n"
+                body += "Github地址: " + str(cve_item['cve_url']) + "\r\n"
+                body += "CVE描述: " + "\r\n" + cve_zh
+                
+                # 发送到配置的渠道
+                app_name = load_config()[0]
+                if app_name == "dingding":
                     dingding(text, body, load_config()[2], load_config()[3])
-                    print("钉钉 发送 CVE 成功")
-                if load_config()[0] == "feishu":
+                    logger.info(f"钉钉 发送 CVE {cve_name} 成功")
+                elif app_name == "feishu":
                     feishu(text, body, load_config()[2])
-                    print("飞书 发送 CVE 成功")
-                if load_config()[0] == "tgbot":
+                    logger.info(f"飞书 发送 CVE {cve_name} 成功")
+                elif app_name == "tgbot":
                     tgbot(text, body, load_config()[2], load_config()[3])
-                    print("tgbot 发送 CVE 成功")
-            except IndexError:
-                pass
+                    logger.info(f"tgbot 发送 CVE {cve_name} 成功")
+            except IndexError as e:
+                logger.error(f"处理CVE数据时索引错误: {e}")
+            except Exception as e:
+                logger.error(f"发送CVE {cve_name} 失败: {e}")
     except Exception as e:
-        print("sendNews 函数 error:{}" .format(e))
+        logger.error(f"sendNews 函数 error: {e}")
 #发送信息到社交工具
 def sendKeywordNews(keyword, data):
+    """发送关键字监控信息到配置的推送渠道"""
     try:
         text = '有新的关键字监控 - {} - 送达! \r\n** 请自行分辨是否为红队钓鱼!!! **' .format(keyword)
-        # 获取 cve 名字 ，根据cve 名字，获取描述，并翻译
+        logger.info(f"开始发送关键字 {keyword} 的 {len(data)} 条监控信息")
+        
+        # 遍历关键字监控数据
         for i in range(len(data)):
             try:
                 item = data[i]
@@ -1412,29 +1438,34 @@ def sendKeywordNews(keyword, data):
                 keyword_url = item.get('keyword_url', '')
                 description = item.get('description', '作者未写描述')
                 translated_description = ""
+                
+                # 翻译描述（如果启用）
                 if load_config()[-1]:
                     translated_description = translate(description)
                 
+                # 构建推送内容
                 body = "项目名称: " + str(keyword_name) + "\r\n"
                 body += "Github地址: " + str(keyword_url) + "\r\n"
                 body += "项目描述: " + str(description) + "\r\n"
                 if translated_description and translated_description != description:
                     body += "项目描述-译文: " + str(translated_description) + "\r\n"
                 
-                if load_config()[0] == "dingding":
+                # 发送到配置的渠道
+                app_name = load_config()[0]
+                if app_name == "dingding":
                     dingding(text, body, load_config()[2], load_config()[3])
-                    print("钉钉 发送 CVE 成功")
-                if load_config()[0] == "feishu":
+                    logger.info(f"钉钉 发送关键字 {keyword} 的项目 {keyword_name} 成功")
+                elif app_name == "feishu":
                     feishu(text, body, load_config()[2])
-                    print("飞书 发送 CVE 成功")
-                if load_config()[0] == "tgbot":
+                    logger.info(f"飞书 发送关键字 {keyword} 的项目 {keyword_name} 成功")
+                elif app_name == "tgbot":
                     tgbot(text, body, load_config()[2], load_config()[3])
-                    print("tgbot 发送 CVE 成功")
+                    logger.info(f"tgbot 发送关键字 {keyword} 的项目 {keyword_name} 成功")
             except Exception as e:
-                print(f"处理关键字监控数据时出错: {e}")
+                logger.error(f"处理关键字 {keyword} 的监控数据时出错: {e}")
                 pass
     except Exception as e:
-        print("sendKeywordNews 函数 error:{}" .format(e))
+        logger.error(f"sendKeywordNews 函数 error: {e}")
 
 # 生成日报功能
 def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=None):
@@ -1714,8 +1745,14 @@ def create_github_issue(title, body):
     import os
     import requests
     
-    # 获取GitHub Token
+    # 获取GitHub Token，优先使用环境变量，其次使用全局配置
     github_token = os.environ.get('GITHUB_TOKEN')
+    
+    # 如果环境变量中没有，尝试使用全局配置中的token
+    if not github_token:
+        global GLOBAL_CONFIG
+        github_token = GLOBAL_CONFIG['github_token']
+        
     if not github_token:
         print("[+] No GITHUB_TOKEN found, skipping GitHub issue creation")
         return
