@@ -1102,9 +1102,9 @@ def check_push_limit_alert():
             elif app_name == "tgbot":
                 tgbot("推送限制提醒", alert_message, webhook, secretKey)
             
-            print("[+] 已发送推送限制提醒")
+            logger.info(f"已发送推送限制提醒: {alert_message.strip()}")
     except Exception as e:
-        print(f"[-] 检查推送限制失败: {e}")
+        logger.error(f"检查推送限制失败: {e}")
 
 # 检查是否超过推送限制
 def is_push_limit_reached():
