@@ -6,21 +6,18 @@ keyword_list:
  - cve-2025
  - 免杀
  - 内网渗透
- - 应急响应
  - 信息收集
- - 漏洞
- - 渗透
  - cobaltstrike
  - shellcode
- - red_team
+ - Red Team
  - rce
  - poc
- - blue_team
+ - poc&exp
+ - Blue Team
  - 远控
- - 综合利用工具
- - 绕过
- - 暴力破解
- - 红队
+ - bypass
+ - 反序列化
+ - 代码审计
 
 user_list:
  - adminlove520

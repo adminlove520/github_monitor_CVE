@@ -13,6 +13,22 @@ import hashlib
 import yaml
 from lxml import etree
 import sqlite3
+import pytz
+import logging
+import logging.handlers
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('github_monitor.log'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger('github_monitor')
+logger.info('程序启动')
 
 # 配置requests会话，添加重试机制和SSL优化
 from requests.adapters import HTTPAdapter
@@ -57,6 +73,115 @@ GLOBAL_CONFIG = {
         'group_id': ''
     }
 }
+
+# 消息队列配置
+MESSAGE_QUEUE_CONFIG = {
+    'max_queue_size': 1000,  # 队列最大容量
+    'max_per_minute': 20,     # 每分钟最多发送20条消息
+    'batch_size': 5           # 批量发送大小
+}
+
+# 消息队列和相关变量
+message_queue = []           # 消息队列
+last_send_time = 0           # 上次发送时间
+message_count = 0            # 分钟内发送消息计数
+message_cache = set()        # 已发送消息缓存，用于去重
+
+# 消息队列类
+class MessageQueue:
+    """轻量级消息队列，处理钉钉推送限制"""
+    
+    def __init__(self):
+        self.queue = []
+        self.last_send = 0
+        self.send_count = 0
+        self.cache = set()
+        
+    def add_message(self, message, priority=1):
+        """添加消息到队列，带优先级"""
+        # 生成消息唯一标识
+        msg_id = hashlib.md5(str(message).encode()).hexdigest()
+        
+        # 检查是否已发送过
+        if msg_id in self.cache:
+            return False
+        
+        # 添加到队列，按优先级排序
+        self.queue.append({
+            'content': message,
+            'priority': priority,
+            'timestamp': time.time(),
+            'id': msg_id
+        })
+        
+        # 按优先级降序排序
+        self.queue.sort(key=lambda x: x['priority'], reverse=True)
+        
+        # 限制队列大小
+        if len(self.queue) > MESSAGE_QUEUE_CONFIG['max_queue_size']:
+            self.queue = self.queue[:MESSAGE_QUEUE_CONFIG['max_queue_size']]
+        
+        return True
+    
+    def send_messages(self):
+        """发送队列中的消息，处理速率限制"""
+        global last_send_time, message_count
+        
+        current_time = time.time()
+        sent_count = 0
+        
+        # 检查是否可以发送新消息（每分钟20条）
+        if current_time - last_send_time > 60:
+            # 重置计数和时间
+            last_send_time = current_time
+            message_count = 0
+        
+        # 计算可以发送的消息数量
+        can_send = min(
+            MESSAGE_QUEUE_CONFIG['max_per_minute'] - message_count,
+            MESSAGE_QUEUE_CONFIG['batch_size'],
+            len(self.queue)
+        )
+        
+        if can_send <= 0:
+            return 0
+        
+        # 发送消息
+        for i in range(can_send):
+            if not self.queue:
+                break
+                
+            message = self.queue.pop(0)
+            
+            try:
+                # 调用实际发送函数
+                self._send_message(message['content'])
+                # 添加到已发送缓存
+                self.cache.add(message['id'])
+                sent_count += 1
+                message_count += 1
+                
+                # 避免发送过快
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"[-] 发送消息失败: {e}")
+                # 可以选择重新入队或丢弃
+        
+        return sent_count
+    
+    def _send_message(self, message):
+        """实际发送消息的函数，根据配置调用不同渠道"""
+        app_name, _, webhook, secretKey, _ = load_config()
+        
+        if app_name == "dingding":
+            dingding("", message, webhook, secretKey)
+        elif app_name == "feishu":
+            feishu("", message, webhook)
+        elif app_name == "tgbot":
+            tgbot("", message, webhook, secretKey)
+
+# 初始化消息队列实例
+msg_queue = MessageQueue()
 
 # 初始化全局配置
 def init_config():
@@ -167,10 +292,10 @@ def load_black_user():
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
             BLACK_USER_CACHE = config.get('all_config', {}).get('black_user', [])
-        print(f"[+] 成功加载 {len(BLACK_USER_CACHE)} 个黑名单用户")
-        print(f"[+] 已启用黑名单配置，共 {len(BLACK_USER_CACHE)} 个用户")
+        logger.info(f"成功加载 {len(BLACK_USER_CACHE)} 个黑名单用户")
+        logger.info(f"已启用黑名单配置，共 {len(BLACK_USER_CACHE)} 个用户")
     except Exception as e:
-        print(f"[警告] 加载黑名单用户失败: {e}")
+        logger.warning(f"加载黑名单用户失败: {e}")
         BLACK_USER_CACHE = []
 
 # 获取黑名单用户
@@ -191,26 +316,42 @@ def create_database():
                    (cve_name varchar(255),
                     pushed_at varchar(255),
                     cve_url varchar(255));''')
-        print("[+] 成功创建CVE监控表")
+        logger.info("成功创建CVE监控表")
         
         # 创建关键字监控表
         cur.execute('''CREATE TABLE IF NOT EXISTS keyword_monitor
                    (keyword_name varchar(255),
                     pushed_at varchar(255),
                     keyword_url varchar(255));''')
-        print("[+] 成功创建关键字监控表")
+        logger.info("成功创建关键字监控表")
         
         # 创建红队工具监控表
         cur.execute('''CREATE TABLE IF NOT EXISTS redteam_tools_monitor
                    (tools_name varchar(255),
                     pushed_at varchar(255),
                     tag_name varchar(255));''')
-        print("[+] 成功创建红队工具监控表")
+        logger.info("成功创建红队工具监控表")
         
         # 创建大佬仓库监控表
         cur.execute('''CREATE TABLE IF NOT EXISTS user_monitor
                    (repo_name varchar(255));''')
-        print("[+] 成功创建大佬仓库监控表")
+        logger.info("成功创建大佬仓库监控表")
+        
+        # 创建推送计数表
+        cur.execute('''CREATE TABLE IF NOT EXISTS push_count
+                   (date TEXT PRIMARY KEY,
+                    count INTEGER);''')
+        logger.info("成功创建推送计数表")
+        
+        # 创建消息缓存表
+        cur.execute('''CREATE TABLE IF NOT EXISTS message_cache
+                   (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_type varchar(50),
+                    message_content TEXT,
+                    message_data TEXT,
+                    create_time datetime,
+                    status varchar(20));''')
+        logger.info("成功创建消息缓存表")
         
         conn.commit()
         conn.close()
@@ -223,7 +364,7 @@ def create_database():
             tgbot("spaceX", "连接成功~", webhook, secretKey)
             
     except Exception as e:
-        print(f"[-] 创建监控表失败！报错：{e}")
+        logger.error(f"创建监控表失败！报错：{e}")
         if 'conn' in locals():
             conn.close()
 #根据排序获取本年前20条CVE
@@ -250,61 +391,75 @@ def getNews():
                         if pushed_at == str(today_date):
                             today_cve_info_tmp.append({"cve_name": cve_name, "cve_url": cve_url, "pushed_at": pushed_at})
                         else:
-                            print("[-] 该{}的更新时间为{}, 不属于今天的CVE" .format(cve_name, pushed_at))
+                            logger.info("[-] 该{}的更新时间为{}, 不属于今天的CVE" .format(cve_name, pushed_at))
                     except Exception as e:
-                        pass
+                        logger.debug(f"处理CVE项目失败: {e}")
             except Exception as e:
-                pass
+                logger.debug(f"遍历CVE项目列表失败: {e}")
         today_cve_info = OrderedDict()
         for item in today_cve_info_tmp:
             today_cve_info.setdefault(item['cve_name'], {**item, })
         today_cve_info = list(today_cve_info.values())
 
+        logger.info(f"成功获取 {len(today_cve_info)} 条今日CVE信息")
         return today_cve_info
         # return cve_total_count, cve_description, cve_url, cve_name
         #\d{4}-\d{2}-\d{2}
 
     except Exception as e:
-        print(f"getNews 函数 error: {e}")
+        logger.error(f"getNews 函数 error: {e}")
         return []
 
 def getKeywordNews(keyword):
     today_keyword_info_tmp = []
     try:
-        # 抓取本年的
-        api = "https://api.github.com/search/repositories?q={}&sort=updated" .format(keyword)
-        json_str = http_session.get(api, headers=github_headers, timeout=10).json()
-        today_date = datetime.date.today()
-        n = len(json_str['items'])
-        if n > 20:
-            n = 20
-        for i in range(0, n):
-            keyword_url = json_str['items'][i]['html_url']
-            if keyword_url.split("/")[-2] not in black_user():
+        # 特殊关键词处理
+        special_keywords = ['poc', 'exp', 'cve']
+        is_special = keyword.lower() in special_keywords or 'cve-' in keyword.lower()
+        
+        if is_special:
+            # 使用专门的特殊关键词搜索函数
+            today_keyword_info_tmp = get_special_keyword_news(keyword)
+        else:
+            # 获取搜索配置
+            search_config = get_github_search_config()
+            
+            # 普通关键词搜索，按配置排序
+            api = "https://api.github.com/search/repositories?q={}&sort={}&order={}&per_page={}" .format(
+                keyword, search_config['sort'], search_config['order'], search_config['per_page'])
+            json_str = http_session.get(api, headers=github_headers, timeout=10).json()
+            today_date = datetime.date.today()
+            
+            for repo in json_str.get('items', []):
                 try:
-                    keyword_name = json_str['items'][i]['name']
-                    # 获取仓库描述
-                    description = json_str['items'][i].get('description', '作者未写描述')
-                    pushed_at_tmp = json_str['items'][i]['created_at']
-                    pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
-                    if pushed_at == str(today_date):
-                        today_keyword_info_tmp.append({"keyword_name": keyword_name, "keyword_url": keyword_url, "pushed_at": pushed_at, "description": description})
-                        print("[+] keyword: {} ,{}" .format(keyword, keyword_name))
-                    else:
-                        print("[-] keyword: {} ,该{}的更新时间为{}, 不属于今天" .format(keyword, keyword_name, pushed_at))
+                    if repo['html_url'].split("/")[-2] not in black_user():
+                        pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', repo['pushed_at'])[0]
+                        if pushed_at == str(today_date):
+                            # 使用关键词检测函数判断相关性
+                            if is_keyword_relevant(repo, keyword):
+                                today_keyword_info_tmp.append({
+                                    "keyword_name": repo['name'], 
+                                    "keyword_url": repo['html_url'], 
+                                    "pushed_at": pushed_at, 
+                                    "description": repo.get('description', '作者未写描述'),
+                                    "stargazers_count": repo.get('stargazers_count', 0)
+                                })
+                                logger.info("keyword: {} ,{} ({} stars)" .format(keyword, repo['name'], repo.get('stargazers_count', 0)))
                 except Exception as e:
-                    pass
-            else:
-                pass
+                    logger.error(f"处理项目 {repo.get('name', '未知')} 时出错: {e}")
+                    continue
+        
+        # 去重处理
         today_keyword_info = OrderedDict()
         for item in today_keyword_info_tmp:
             today_keyword_info.setdefault(item['keyword_name'], {**item, })
         today_keyword_info = list(today_keyword_info.values())
-
+        
+        logger.info(f"成功获取 {len(today_keyword_info)} 条关键词 '{keyword}' 的新闻")
         return today_keyword_info
 
     except Exception as e:
-        print(e, "github链接不通")
+        logger.error(f"getKeywordNews 函数 error: {e}")
     return today_keyword_info_tmp
 
 #获取到的关键字仓库信息插入到数据库
@@ -775,6 +930,249 @@ def baidu_translate(word):
         print(f"百度翻译失败: {e}")
         return word
 
+# 夜间模式配置
+default_night_time_config = {
+    'start_hour': 0,    # 夜间开始时间（小时）
+    'end_hour': 7       # 夜间结束时间（小时）
+}
+
+# 检查是否为夜间时间（北京时间）
+def is_night_time():
+    """检查当前是否为夜间时间（北京时间）"""
+    import datetime
+    import pytz
+    
+    try:
+        # 获取当前北京时间
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        now = datetime.datetime.now(beijing_tz)
+        current_hour = now.hour
+        
+        # 检查是否在夜间时间范围内
+        return default_night_time_config['start_hour'] <= current_hour < default_night_time_config['end_hour']
+    except Exception as e:
+        print(f"[-] 检查夜间时间失败: {e}")
+        # 发生错误时，默认返回False，不影响程序运行
+        return False
+
+# 主函数中添加夜间模式检查
+def main():
+    """主函数，添加夜间模式检查"""
+    # 检查是否为夜间时间
+    if is_night_time():
+        print("[+] 当前为夜间时间（北京时间0-7点），程序休眠中...")
+        # 休眠直到早上7点
+        import time
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        now = datetime.datetime.now(beijing_tz)
+        # 计算到早上7点的秒数
+        tomorrow = now.replace(hour=7, minute=0, second=0, microsecond=0)
+        if now.hour >= 7:
+            tomorrow += datetime.timedelta(days=1)
+        sleep_seconds = (tomorrow - now).total_seconds()
+        time.sleep(sleep_seconds)
+        print("[+] 夜间时间结束，程序继续运行...")
+
+# 推送限制配置
+PUSH_LIMITS = {
+    'daily': 500,      # 每日推送限制
+    'monthly': 5000,   # 每月推送限制
+    'alert_threshold': 0.8  # 接近限制的提醒阈值（80%）
+}
+
+# 初始化推送计数表
+def init_push_count_table():
+    """初始化推送计数表"""
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        # 创建推送计数表
+        cur.execute('''CREATE TABLE IF NOT EXISTS push_count 
+                      (date TEXT PRIMARY KEY, count INTEGER)''')
+        conn.commit()
+        print("[+] 推送计数表初始化成功")
+    except Exception as e:
+        print(f"[-] 初始化推送计数表失败: {e}")
+    finally:
+        conn.close()
+
+# 获取当日推送计数
+def get_today_push_count():
+    import datetime
+    
+    today = datetime.date.today().strftime('%Y-%m-%d')
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("SELECT count FROM push_count WHERE date = ?", (today,))
+        result = cur.fetchone()
+        return result[0] if result else 0
+    except Exception as e:
+        print(f"[-] 获取当日推送计数失败: {e}")
+        return 0
+    finally:
+        conn.close()
+
+# 获取本月推送计数
+def get_monthly_push_count():
+    """获取本月推送总数"""
+    import datetime
+    
+    today = datetime.date.today()
+    month_start = today.replace(day=1).strftime('%Y-%m-%d')
+    
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("SELECT SUM(count) FROM push_count WHERE date >= ?", (month_start,))
+        result = cur.fetchone()
+        return result[0] if result else 0
+    except Exception as e:
+        print(f"[-] 获取本月推送计数失败: {e}")
+        return 0
+    finally:
+        conn.close()
+
+# 更新当日推送计数
+def update_push_count():
+    import datetime
+    
+    today = datetime.date.today().strftime('%Y-%m-%d')
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        # 检查是否已有今日记录
+        cur.execute("SELECT count FROM push_count WHERE date = ?", (today,))
+        result = cur.fetchone()
+        
+        if result:
+            # 更新现有记录
+            new_count = result[0] + 1
+            cur.execute("UPDATE push_count SET count = ? WHERE date = ?", (new_count, today))
+        else:
+            # 插入新记录
+            cur.execute("INSERT INTO push_count (date, count) VALUES (?, 1)", (today,))
+        
+        conn.commit()
+        
+        # 检查是否需要发送提醒
+        check_push_limit_alert()
+        
+        return True
+    except Exception as e:
+        print(f"[-] 更新推送计数失败: {e}")
+        return False
+    finally:
+        conn.close()
+
+# 检查推送限制并发送提醒
+def check_push_limit_alert():
+    """检查是否接近推送限制，发送提醒"""
+    try:
+        daily_count = get_today_push_count()
+        monthly_count = get_monthly_push_count()
+        
+        # 计算接近程度
+        daily_ratio = daily_count / PUSH_LIMITS['daily']
+        monthly_ratio = monthly_count / PUSH_LIMITS['monthly']
+        
+        # 检查是否需要发送提醒
+        alert_needed = False
+        alert_message = ""
+        
+        if daily_ratio >= PUSH_LIMITS['alert_threshold']:
+            alert_message += f"⚠️  当日推送已使用 {daily_count}/{PUSH_LIMITS['daily']} 条 ({int(daily_ratio*100)}%)\n"
+            alert_needed = True
+        
+        if monthly_ratio >= PUSH_LIMITS['alert_threshold']:
+            alert_message += f"⚠️  本月推送已使用 {monthly_count}/{PUSH_LIMITS['monthly']} 条 ({int(monthly_ratio*100)}%)\n"
+            alert_needed = True
+        
+        if alert_needed:
+            # 发送提醒消息
+            app_name, _, webhook, secretKey, _ = load_config()
+            if app_name == "dingding":
+                dingding("推送限制提醒", alert_message, webhook, secretKey)
+            elif app_name == "feishu":
+                feishu("推送限制提醒", alert_message, webhook)
+            elif app_name == "tgbot":
+                tgbot("推送限制提醒", alert_message, webhook, secretKey)
+            
+            print("[+] 已发送推送限制提醒")
+    except Exception as e:
+        print(f"[-] 检查推送限制失败: {e}")
+
+# 检查是否超过推送限制
+def is_push_limit_reached():
+    """检查是否超过每日推送限制"""
+    daily_count = get_today_push_count()
+    return daily_count >= PUSH_LIMITS['daily']
+
+# 缓存消息到数据库
+def cache_message(message_type, message_content, message_data):
+    import datetime
+    
+    create_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        cur.execute(
+            "INSERT INTO message_cache (message_type, message_content, message_data, create_time, status) VALUES (?, ?, ?, ?, ?)",
+            (message_type, message_content, message_data, create_time, 'pending')
+        )
+        conn.commit()
+        conn.close()
+        print(f"[+] 消息已缓存到数据库: {message_type}")
+        return True
+    except Exception as e:
+        conn.close()
+        print(f"[-] 缓存消息失败: {e}")
+        return False
+
+# 发送缓存的消息
+def send_cached_messages():
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()
+    
+    try:
+        # 获取所有待发送的消息
+        cur.execute("SELECT id, message_type, message_content, message_data FROM message_cache WHERE status = 'pending' ORDER BY id LIMIT 500")
+        cached_messages = cur.fetchall()
+        
+        if not cached_messages:
+            conn.close()
+            return 0
+        
+        sent_count = 0
+        for msg in cached_messages:
+            msg_id, msg_type, msg_content, msg_data = msg
+            
+            # 检查是否超过推送限制
+            if is_push_limit_reached():
+                break
+            
+            # 发送消息（这里需要根据message_type和message_content调用对应的发送函数）
+            # 由于消息内容已经序列化，需要根据实际情况反序列化后发送
+            print(f"[+] 发送缓存消息: {msg_type}")
+            
+            # 更新消息状态
+            cur.execute("UPDATE message_cache SET status = 'sent' WHERE id = ?", (msg_id,))
+            update_push_count()
+            sent_count += 1
+        
+        conn.commit()
+        conn.close()
+        return sent_count
+    except Exception as e:
+        conn.close()
+        print(f"[-] 发送缓存消息失败: {e}")
+        return 0
+
 # 主翻译函数，默认使用Google翻译
 def translate(word):
     # 先检查是否已经是中文，避免不必要的翻译
@@ -797,30 +1195,56 @@ def translate(word):
 # 钉钉
 def dingding(text, msg,webhook,secretKey):
     try:
-        ding = cb.DingtalkChatbot(webhook, secret=secretKey)
-        ding.send_text(msg='{}\r\n{}'.format(text, msg), is_at_all=False)
+        # 构建完整消息
+        full_message = '{}\r\n{}'.format(text, msg)
+        
+        # 添加到消息队列，设置优先级
+        priority = 2 if 'CVE' in text.upper() or '漏洞' in text else 1
+        msg_queue.add_message(full_message, priority)
+        
+        # 尝试发送队列中的消息
+        msg_queue.send_messages()
+        
+        print("[+] 消息已加入队列，等待发送")
     except Exception as e:
         print(f"钉钉推送失败: {e}")
         pass
 ## 飞书
 def feishu(text,msg,webhook):
     try:
-        ding = cb.DingtalkChatbot(webhook)
-        ding.send_text(msg='{}\r\n{}'.format(text, msg), is_at_all=False)
+        # 构建完整消息
+        full_message = '{}\r\n{}'.format(text, msg)
+        
+        # 添加到消息队列
+        priority = 2 if 'CVE' in text.upper() or '漏洞' in text else 1
+        msg_queue.add_message(full_message, priority)
+        
+        # 尝试发送队列中的消息
+        msg_queue.send_messages()
+        
+        print("[+] 消息已加入队列，等待发送")
     except Exception as e:
         print(f"飞书推送失败: {e}")
         pass
 # 添加Telegram Bot推送支持
 def tgbot(text, msg,token,group_id):
     try:
-        import telegram
-        bot = telegram.Bot(token='{}'.format(token))# Your Telegram Bot Token
-        bot.send_message(chat_id=group_id, text='{}\r\n{}'.format(text, msg))
+        # 构建完整消息
+        full_message = '{}\r\n{}'.format(text, msg)
+        
+        # 添加到消息队列
+        priority = 2 if 'CVE' in text.upper() or '漏洞' in text else 1
+        msg_queue.add_message(full_message, priority)
+        
+        # 尝试发送队列中的消息
+        msg_queue.send_messages()
+        
+        print("[+] 消息已加入队列，等待发送")
     except Exception as e:
         print(f"Telegram推送失败: {e}")
         pass
 
-#判断是否存在该CVE
+# 判断是否存在该CVE
 def exist_cve(cve):
     try:
         query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
@@ -830,6 +1254,83 @@ def exist_cve(cve):
         return 1
     except Exception as e:
         return 0
+
+# 关键词检测函数，判断项目是否与关键词相关
+def is_keyword_relevant(repo, keyword):
+    """检查项目是否与关键词相关"""
+    # 检查项目名称
+    if keyword.lower() in repo.get('name', '').lower():
+        return True
+    # 检查项目描述
+    if repo.get('description') and keyword.lower() in repo['description'].lower():
+        return True
+    # 检查内容长度
+    if len(repo.get('description', '')) < 20:
+        return True
+    return False
+
+# 获取GitHub搜索配置
+def get_github_search_config():
+    """读取GitHub搜索配置"""
+    try:
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.load(f, Loader=yaml.FullLoader)
+            github_search_config = config.get('all_config', {}).get('github_search', {})
+        
+        # 设置默认值
+        return {
+            'star_threshold': github_search_config.get('star_threshold', 100),
+            'per_page': github_search_config.get('per_page', 20),
+            'sort': github_search_config.get('sort', 'stars'),
+            'order': github_search_config.get('order', 'desc')
+        }
+    except Exception as e:
+        print(f"[-] 读取GitHub搜索配置失败: {e}")
+        # 返回默认配置
+        return {
+            'star_threshold': 100,
+            'per_page': 20,
+            'sort': 'stars',
+            'order': 'desc'
+        }
+
+# 特殊关键词新闻获取函数
+def get_special_keyword_news(keyword):
+    """使用CVE-Poc_All_in_One的搜索逻辑获取特殊关键词新闻"""
+    today_special_news = []
+    try:
+        # 获取搜索配置
+        search_config = get_github_search_config()
+        
+        # 特殊关键词使用高级搜索，按star数降序
+        api = f"https://api.github.com/search/repositories?q={keyword}&sort={search_config['sort']}&order={search_config['order']}&per_page={search_config['per_page']}"
+        json_str = http_session.get(api, headers=github_headers, timeout=10).json()
+        today_date = datetime.date.today()
+        
+        for repo in json_str.get('items', []):
+            try:
+                # 检查star数是否达到阈值
+                if repo.get('stargazers_count', 0) < search_config['star_threshold']:
+                    continue
+                    
+                if repo['html_url'].split("/")[-2] not in black_user():
+                    pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', repo['pushed_at'])[0]
+                    if pushed_at == str(today_date):
+                        today_special_news.append({
+                            "keyword_name": repo['name'],
+                            "keyword_url": repo['html_url'],
+                            "pushed_at": pushed_at,
+                            "description": repo.get('description', '作者未写描述'),
+                            "stargazers_count": repo.get('stargazers_count', 0)
+                        })
+                        print(f"[+] special keyword: {keyword}, {repo['name']} ({repo.get('stargazers_count', 0)} stars)")
+            except Exception as e:
+                print(f"[-] 处理特殊关键词项目 {repo.get('name', '未知')} 时出错: {e}")
+                continue
+    except Exception as e:
+        print(f"get_special_keyword_news 函数 error: {e}")
+    
+    return today_special_news
 
 # 根据cve 名字，获取描述，并翻译
 def get_cve_des_zh(cve):
@@ -1261,6 +1762,12 @@ if __name__ == '__main__':
     # 检查是否在GitHub Actions环境中运行
     is_github_actions = os.environ.get('GITHUB_ACTIONS') == 'true'
     
+    # 发送缓存的消息（如果有）
+    if not is_github_actions:
+        sent_count = send_cached_messages()
+        if sent_count > 0:
+            print(f"[+] 已发送 {sent_count} 条缓存消息")
+    
     # 如果在GitHub Actions中，只执行一次
     if is_github_actions:
         tools_list, keyword_list, user_list = load_tools_list()
@@ -1311,6 +1818,16 @@ if __name__ == '__main__':
     else:
         # 本地运行时，循环执行
         while True:
+            # 夜间休眠检查
+            if is_night_time():
+                import datetime
+                beijing_tz = pytz.timezone('Asia/Shanghai')
+                now = datetime.datetime.now(beijing_tz)
+                next_morning = now.replace(hour=7, minute=0, second=0, microsecond=0)
+                sleep_seconds = (next_morning - now).total_seconds()
+                print(f"[+] 当前为夜间时间 {now.strftime('%H:%M:%S')}，程序将休眠至早上7点，预计休眠 {sleep_seconds/3600:.1f} 小时")
+                time.sleep(sleep_seconds)
+            
             tools_list, keyword_list, user_list = load_tools_list()
             tools_data = get_pushed_at_time(tools_list)
             tools_insert_into_sqlite3(tools_data)   # 获取文件中的工具列表，并从 github 获取相关信息，存储下来

@@ -6,6 +6,13 @@ all_config:
   # 请将此值设置为GitHub Secrets，不要直接提交到代码库
   github_token: 
 
+  # GitHub搜索配置
+  github_search:
+    star_threshold: 0  # 最低star数要求，用于过滤低质量项目
+    per_page: 20         # 每页返回结果数量
+    sort: stars          # 排序方式：stars, updated, created
+    order: desc          # 排序顺序：desc, asc
+
   # 消息推送配置
   # 只需要启用一个推送渠道即可
   dingding:
@@ -40,6 +47,12 @@ all_config:
   # 用于屏蔽垃圾用户和仓库
   # 从 https://github.com/BonjourFeng/Github-Search-Purification/blob/main/script.js 获取并定期更新
   black_user:
+    - Poppy666
+    - inmis
+    - yansu050
+    - Whning0513
+    - lTbgykio
+    - Dujltqzv
     - GreenHand0001
     - cirosantilli
     - wumaoland

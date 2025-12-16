@@ -2,3 +2,6 @@ requests
 dingtalkchatbot
 pyyaml
 lxml
+pytz
+python-telegram-bot
+redis
