@@ -1382,8 +1382,30 @@ def get_cve_des_zh(cve):
         query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
         response = http_session.get(query_cve_url, timeout=10)
         html = etree.HTML(response.text)
-        des = html.xpath('//*[@id="GeneratedTable"]/table//tr[4]/td/text()')[0].strip()
-        cve_time = html.xpath('//*[@id="GeneratedTable"]/table//tr[11]/td[1]/b/text()')[0].strip()
+        
+        # 尝试多种xpath选择器，适应不同页面结构
+        try:
+            # 旧版页面结构
+            des = html.xpath('//*[@id="GeneratedTable"]/table//tr[4]/td/text()')[0].strip()
+            cve_time = html.xpath('//*[@id="GeneratedTable"]/table//tr[11]/td[1]/b/text()')[0].strip()
+        except IndexError:
+            try:
+                # 新版页面结构 - 尝试其他可能的xpath路径
+                des_elements = html.xpath('//td[@class="description"]/text()') or \
+                              html.xpath('//div[@class="description"]/text()') or \
+                              html.xpath('//td[contains(text(), "Description")]/following-sibling::td/text()') or \
+                              html.xpath('//div[contains(@id, "description")]/text()')
+                des = des_elements[0].strip() if des_elements else "无法获取CVE描述"
+                
+                # 尝试获取发布时间
+                time_elements = html.xpath('//td[contains(text(), "Published")]/following-sibling::td/text()') or \
+                              html.xpath('//div[contains(text(), "Published")]/text()')
+                cve_time = time_elements[0].strip() if time_elements else "未知时间"
+            except Exception as e2:
+                logger.error(f"尝试多种xpath选择器均失败: {e2}")
+                return "无法获取CVE描述", "未知时间"
+        
+        # 翻译描述（如果启用）
         if load_config()[-1]:
             translated_des = translate(des)
             return translated_des, cve_time
