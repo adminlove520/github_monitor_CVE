@@ -1376,34 +1376,96 @@ def get_special_keyword_news(keyword):
     return today_special_news
 
 #根据cve 名字，获取描述，并翻译
-def get_cve_des_zh(cve):
-    """获取CVE描述并翻译"""
+def get_cve_des_zh(cve, github_url=None):
+    """获取CVE描述并翻译，如果CVE API失败则尝试从GitHub README获取"""
     try:
-        query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
+        # 首先尝试从CVE API获取信息
+        query_cve_url = "https://cveawg.mitre.org/api/cve/" + cve
         response = http_session.get(query_cve_url, timeout=10)
-        html = etree.HTML(response.text)
         
-        # 尝试多种xpath选择器，适应不同页面结构
-        try:
-            # 旧版页面结构
-            des = html.xpath('//*[@id="GeneratedTable"]/table//tr[4]/td/text()')[0].strip()
-            cve_time = html.xpath('//*[@id="GeneratedTable"]/table//tr[11]/td[1]/b/text()')[0].strip()
-        except IndexError:
+        if response.status_code == 200:
+            data = response.json()
+            
+            # 从JSON数据中提取描述
             try:
-                # 新版页面结构 - 尝试其他可能的xpath路径
-                des_elements = html.xpath('//td[@class="description"]/text()') or \
-                              html.xpath('//div[@class="description"]/text()') or \
-                              html.xpath('//td[contains(text(), "Description")]/following-sibling::td/text()') or \
-                              html.xpath('//div[contains(@id, "description")]/text()')
-                des = des_elements[0].strip() if des_elements else "无法获取CVE描述"
+                # 优先从containers.cna.descriptions中获取描述
+                descriptions = data.get('containers', {}).get('cna', {}).get('descriptions', [])
+                if descriptions:
+                    # 寻找英文描述，支持en和en-US
+                    des = next((desc.get('value', '') for desc in descriptions if desc.get('lang', '').startswith('en')), '')
+                else:
+                    # 尝试其他可能的描述字段
+                    des = data.get('descriptions', [{}])[0].get('value', '')
                 
-                # 尝试获取发布时间
-                time_elements = html.xpath('//td[contains(text(), "Published")]/following-sibling::td/text()') or \
-                              html.xpath('//div[contains(text(), "Published")]/text()')
-                cve_time = time_elements[0].strip() if time_elements else "未知时间"
-            except Exception as e2:
-                logger.error(f"尝试多种xpath选择器均失败: {e2}")
-                return "无法获取CVE描述", "未知时间"
+                # 提取发布时间
+                cve_time = data.get('cveMetadata', {}).get('datePublished', '') or data.get('published', '')
+                if cve_time:
+                    # 格式化时间，从ISO格式转换为更友好的格式
+                    import datetime
+                    cve_time = datetime.datetime.fromisoformat(cve_time.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    cve_time = "未知时间"
+                
+                # 确保描述不为空
+                des = des.strip() if des.strip() else "无法获取CVE描述"
+            except Exception as e_json:
+                logger.error(f"解析CVE {cve} JSON数据失败: {e_json}")
+                des = "无法获取CVE描述"
+                cve_time = "未知时间"
+        else:
+            logger.error(f"获取CVE {cve} 信息失败，HTTP状态码: {response.status_code}")
+            des = "无法获取CVE描述"
+            cve_time = "未知时间"
+        
+        # 如果从CVE API获取到了有效信息，直接返回
+        if des != "无法获取CVE描述" and cve_time != "未知时间":
+            # 翻译描述（如果启用）
+            if load_config()[-1]:
+                translated_des = translate(des)
+                return translated_des, cve_time
+            return des, cve_time
+        
+        # 如果CVE API获取失败，尝试从GitHub README获取信息
+        if github_url:
+            logger.info(f"尝试从GitHub URL获取CVE {cve} 信息: {github_url}")
+            try:
+                # 从GitHub URL提取owner和repo
+                import re
+                match = re.match(r'https://github.com/([^/]+)/([^/]+)', github_url)
+                if match:
+                    owner, repo = match.groups()
+                    # 获取GitHub仓库的README
+                    readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
+                    readme_response = http_session.get(readme_url, headers=github_headers, timeout=10)
+                    
+                    if readme_response.status_code == 200:
+                        readme_data = readme_response.json()
+                        import base64
+                        # 解码README内容
+                        readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
+                        
+                        # 使用README的所有内容作为描述
+                        des = readme_content.strip()
+                        if not des:
+                            des = "GitHub仓库README内容为空"
+                        
+                        # 获取仓库的推送时间
+                        repo_url = f"https://api.github.com/repos/{owner}/{repo}"
+                        repo_response = http_session.get(repo_url, headers=github_headers, timeout=10)
+                        if repo_response.status_code == 200:
+                            repo_data = repo_response.json()
+                            pushed_at = repo_data.get('pushed_at', '')
+                            if pushed_at:
+                                import datetime
+                                cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                            else:
+                                cve_time = "未知时间"
+                        
+                        logger.info(f"从GitHub成功获取CVE {cve} 信息")
+                    else:
+                        logger.error(f"获取GitHub README失败: {readme_response.status_code}")
+            except Exception as e_github:
+                logger.error(f"从GitHub获取CVE {cve} 信息失败: {e_github}")
         
         # 翻译描述（如果启用）
         if load_config()[-1]:
@@ -1412,7 +1474,40 @@ def get_cve_des_zh(cve):
         return des, cve_time
     except Exception as e:
         logger.error(f"获取CVE {cve} 描述失败: {e}")
-        # 如果获取失败，返回默认值
+        
+        # 如果CVE API失败且提供了GitHub URL，尝试从GitHub获取
+        if github_url:
+            try:
+                logger.info(f"尝试从GitHub URL获取CVE {cve} 信息: {github_url}")
+                import re
+                match = re.match(r'https://github.com/([^/]+)/([^/]+)', github_url)
+                if match:
+                    owner, repo = match.groups()
+                    # 获取仓库的基本信息（包含推送时间）
+                    repo_url = f"https://api.github.com/repos/{owner}/{repo}"
+                    repo_response = http_session.get(repo_url, headers=github_headers, timeout=10)
+                    if repo_response.status_code == 200:
+                        repo_data = repo_response.json()
+                        # 使用仓库描述作为CVE描述
+                        des = repo_data.get('description', 'GitHub仓库未提供描述')
+                        # 获取仓库推送时间
+                        pushed_at = repo_data.get('pushed_at', '')
+                        if pushed_at:
+                            import datetime
+                            cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            cve_time = "未知时间"
+                        
+                        logger.info(f"从GitHub成功获取CVE {cve} 信息")
+                        # 翻译描述（如果启用）
+                        if load_config()[-1]:
+                            translated_des = translate(des)
+                            return translated_des, cve_time
+                        return des, cve_time
+            except Exception as e_github:
+                logger.error(f"从GitHub获取CVE {cve} 信息失败: {e_github}")
+        
+        # 如果所有尝试都失败，返回默认值
         return "无法获取CVE描述", "未知时间"
 
 #发送CVE信息到社交工具
@@ -1428,8 +1523,8 @@ def sendNews(data):
                 cve_item = data[i]
                 cve_name = re.findall(r'(CVE\-\d+\-\d+)', cve_item['cve_name'])[0].upper()
                 
-                # 获取CVE描述
-                cve_zh, cve_time = get_cve_des_zh(cve_name)
+                # 获取CVE描述，传递GitHub URL作为备选
+                cve_zh, cve_time = get_cve_des_zh(cve_name, cve_item['cve_url'])
                 
                 # 构建推送内容
                 body = "CVE编号: " + cve_name + "  --- " + cve_time + " \r\n"
