@@ -486,7 +486,7 @@ def getKeywordNews(keyword):
             today_keyword_info.setdefault(item['keyword_name'], {**item, })
         today_keyword_info = list(today_keyword_info.values())
         
-        logger.info(f"成功获取 {len(today_keyword_info)} 条关键词 '{keyword}' 的新闻")
+        logger.info(f"成功获取 {len(today_keyword_info)} 条关键词 '{keyword}' ")
         return today_keyword_info
 
     except Exception as e:
@@ -1610,7 +1610,8 @@ def sendNews(data):
                 cve_zh, cve_time = get_cve_des_zh(cve_name, cve_item['cve_url'])
                 
                 # 构建推送内容
-                body = "CVE编号: " + cve_name + "  --- " + cve_time + " \r\n"
+                body = "CVE编号: " + cve_name + " \r\n"
+                body += "发布时间: " + cve_time + " \r\n"
                 body += "Github地址: " + str(cve_item['cve_url']) + "\r\n"
                 body += "CVE描述: " + "\r\n" + cve_zh
                 
