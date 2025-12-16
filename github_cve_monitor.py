@@ -173,12 +173,38 @@ class MessageQueue:
         """实际发送消息的函数，根据配置调用不同渠道"""
         app_name, _, webhook, secretKey, _ = load_config()
         
-        if app_name == "dingding":
-            dingding("", message, webhook, secretKey)
-        elif app_name == "feishu":
-            feishu("", message, webhook)
-        elif app_name == "tgbot":
-            tgbot("", message, webhook, secretKey)
+        try:
+            from dingtalkchatbot.chatbot import DingtalkChatbot
+            
+            if app_name == "dingding":
+                # 直接调用DingtalkChatbot，避免递归调用
+                ding = DingtalkChatbot(webhook, secret=secretKey)
+                ding.send_text(msg=message, is_at_all=False)
+                update_push_count()
+                logger.info("[+] 钉钉消息发送成功")
+            elif app_name == "feishu":
+                # 直接发送飞书消息，避免递归调用
+                import requests
+                headers = {"Content-Type": "application/json"}
+                data = {
+                    "msg_type": "text",
+                    "content": {
+                        "text": message
+                    }
+                }
+                response = requests.post(webhook, json=data, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    update_push_count()
+                    logger.info("[+] 飞书消息发送成功")
+            elif app_name == "tgbot":
+                # 直接发送Telegram消息，避免递归调用
+                import telegram
+                bot = telegram.Bot(token=webhook)
+                bot.send_message(chat_id=secretKey, text=message, timeout=10)
+                update_push_count()
+                logger.info("[+] Telegram消息发送成功")
+        except Exception as e:
+            logger.error(f"[-] 发送消息失败: {e}")
 
 # 初始化消息队列实例
 msg_queue = MessageQueue()
