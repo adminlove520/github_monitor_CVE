@@ -1290,12 +1290,16 @@ def tgbot(text, msg,token,group_id):
 # 判断是否存在该CVE
 def exist_cve(cve):
     try:
-        query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
+        # 使用新版MITRE API检查CVE是否存在
+        query_cve_url = "https://cveawg.mitre.org/api/cve/" + cve
         response = http_session.get(query_cve_url, timeout=10)
-        html = etree.HTML(response.text)
-        des = html.xpath('//*[@id="GeneratedTable"]/table//tr[4]/td/text()')[0].strip()
-        return 1
+        # 如果HTTP状态码是200，说明CVE存在
+        if response.status_code == 200:
+            return 1
+        else:
+            return 0
     except Exception as e:
+        logger.error(f"检查CVE {cve} 存在性失败: {e}")
         return 0
 
 # 关键词检测函数，判断项目是否与关键词相关
@@ -1400,9 +1404,15 @@ def get_cve_des_zh(cve, github_url=None):
                 # 提取发布时间
                 cve_time = data.get('cveMetadata', {}).get('datePublished', '') or data.get('published', '')
                 if cve_time:
-                    # 格式化时间，从ISO格式转换为更友好的格式
+                    # 格式化时间，兼容Python 3.6及以下版本
                     import datetime
-                    cve_time = datetime.datetime.fromisoformat(cve_time.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                    try:
+                        # 尝试使用fromisoformat（Python 3.7+）
+                        cve_time = datetime.datetime.fromisoformat(cve_time.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                    except AttributeError:
+                        # 兼容旧版本Python
+                        import dateutil.parser
+                        cve_time = dateutil.parser.isoparse(cve_time).strftime('%Y-%m-%d %H:%M:%S')
                 else:
                     cve_time = "未知时间"
                 
@@ -1457,7 +1467,13 @@ def get_cve_des_zh(cve, github_url=None):
                             pushed_at = repo_data.get('pushed_at', '')
                             if pushed_at:
                                 import datetime
-                                cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                                try:
+                                    # 尝试使用fromisoformat（Python 3.7+）
+                                    cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                                except AttributeError:
+                                    # 兼容旧版本Python
+                                    import dateutil.parser
+                                    cve_time = dateutil.parser.isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
                             else:
                                 cve_time = "未知时间"
                         
@@ -1489,12 +1505,21 @@ def get_cve_des_zh(cve, github_url=None):
                     if repo_response.status_code == 200:
                         repo_data = repo_response.json()
                         # 使用仓库描述作为CVE描述
-                        des = repo_data.get('description', 'GitHub仓库未提供描述')
+                        des = repo_data.get('description', '')
+                        # 如果描述为空，使用仓库名称作为备选
+                        if not des.strip():
+                            des = f"{owner}/{repo}"
                         # 获取仓库推送时间
                         pushed_at = repo_data.get('pushed_at', '')
                         if pushed_at:
                             import datetime
-                            cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                            try:
+                                # 尝试使用fromisoformat（Python 3.7+）
+                                cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
+                            except AttributeError:
+                                # 兼容旧版本Python
+                                import dateutil.parser
+                                cve_time = dateutil.parser.isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
                         else:
                             cve_time = "未知时间"
                         
@@ -1504,10 +1529,38 @@ def get_cve_des_zh(cve, github_url=None):
                             translated_des = translate(des)
                             return translated_des, cve_time
                         return des, cve_time
+                    else:
+                        # 如果获取仓库信息失败，直接使用owner/repo作为描述
+                        des = f"{owner}/{repo}"
+                        cve_time = "未知时间"
+                        logger.info(f"从GitHub获取CVE {cve} 信息失败，使用owner/repo作为描述")
+                        # 翻译描述（如果启用）
+                        if load_config()[-1]:
+                            translated_des = translate(des)
+                            return translated_des, cve_time
+                        return des, cve_time
             except Exception as e_github:
                 logger.error(f"从GitHub获取CVE {cve} 信息失败: {e_github}")
         
-        # 如果所有尝试都失败，返回默认值
+        # 如果所有尝试都失败，尝试从GitHub URL提取owner/repo作为最后的备选
+        if github_url:
+            try:
+                import re
+                match = re.match(r'https://github.com/([^/]+)/([^/]+)', github_url)
+                if match:
+                    owner, repo = match.groups()
+                    des = f"{owner}/{repo}"
+                    cve_time = "未知时间"
+                    logger.info(f"所有尝试失败，使用owner/repo作为CVE {cve} 的描述")
+                    # 翻译描述（如果启用）
+                    if load_config()[-1]:
+                        translated_des = translate(des)
+                        return translated_des, cve_time
+                    return des, cve_time
+            except Exception as e_final:
+                logger.error(f"从GitHub URL提取owner/repo失败: {e_final}")
+        
+        # 如果真的所有尝试都失败，返回默认值
         return "无法获取CVE描述", "未知时间"
 
 #发送CVE信息到社交工具
