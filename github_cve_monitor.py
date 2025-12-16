@@ -572,17 +572,25 @@ def get_today_cve_info(today_cve_info_data):
     # today_cve_info_data = getNews()
     for i in range(len(today_cve_info_data)):
         try:
-            today_cve_name = re.findall(r'(CVE\-\d+\-\d+)', today_cve_info_data[i]['cve_name'])[0].upper()
+            today_cve_item = today_cve_info_data[i]
+            today_cve_name = re.findall(r'(CVE\-\d+\-\d+)', today_cve_item['cve_name'])[0].upper()
             
             # 检查CVE是否存在于数据库中，避免重复推送
             Verify = query_cve_info_database(today_cve_name.upper())
             if Verify == 0:
-                print("[+] 数据库里不存在{}".format(today_cve_name.upper()))
-                today_all_cve_info.append(today_cve_info_data[i])
+                # 检查CVE是否在mitre.org上存在
+                cve_exists = exist_cve(today_cve_name)
+                
+                # 如果CVE存在于mitre.org或创建/更新时间是今天，都推送
+                if cve_exists == 1 or today_cve_item['pushed_at'] == str(datetime.date.today()):
+                    print("[+] 数据库里不存在{}，mitre.org状态: {}，属于今天的CVE" .format(today_cve_name.upper(), "存在" if cve_exists == 1 else "不存在"))
+                    today_all_cve_info.append(today_cve_item)
+                else:
+                    print("[-] 数据库里不存在{}，但mitre.org上也不存在，且不是今天更新，跳过" .format(today_cve_name.upper()))
             else:
                 print("[-] 数据库里存在{}".format(today_cve_name.upper()))
         except Exception as e:
-            print(f"[-] 处理CVE {today_cve_info_data[i].get('cve_name', '未知')} 时出错: {e}")
+            print(f"[-] 处理CVE {today_cve_item.get('cve_name', '未知')} 时出错: {e}")
             pass
     
     logger.info(f"get_today_cve_info 返回 {len(today_all_cve_info)} 条CVE信息")
