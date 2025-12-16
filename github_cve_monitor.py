@@ -412,12 +412,17 @@ def getNews():
                     try:
                         cve_name_tmp = json_str['items'][i]['name'].upper()
                         cve_name = re.findall(r'(CVE\-\d+\-\d+)', cve_name_tmp)[0].upper()
-                        pushed_at_tmp = json_str['items'][i]['created_at']
-                        pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0]
-                        if pushed_at == str(today_date):
+                        
+                        # 同时检查创建时间和更新时间
+                        created_at = re.findall(r'\d{4}-\d{2}-\d{2}', json_str['items'][i]['created_at'])[0]
+                        pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', json_str['items'][i]['pushed_at'])[0]
+                        
+                        # 如果创建时间或更新时间是今天，都视为今天的CVE
+                        if created_at == str(today_date) or pushed_at == str(today_date):
                             today_cve_info_tmp.append({"cve_name": cve_name, "cve_url": cve_url, "pushed_at": pushed_at})
+                            logger.info("[+] 该{}的创建时间为{}，更新时间为{}，属于今天的CVE" .format(cve_name, created_at, pushed_at))
                         else:
-                            logger.info("[-] 该{}的更新时间为{}, 不属于今天的CVE" .format(cve_name, pushed_at))
+                            logger.info("[-] 该{}的创建时间为{}，更新时间为{}, 不属于今天的CVE" .format(cve_name, created_at, pushed_at))
                     except Exception as e:
                         logger.debug(f"处理CVE项目失败: {e}")
             except Exception as e:
