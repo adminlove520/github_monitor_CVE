@@ -1290,17 +1290,29 @@ def tgbot(text, msg,token,group_id):
 # 判断是否存在该CVE
 def exist_cve(cve):
     try:
-        # 使用新版MITRE API检查CVE是否存在
+        # 首先尝试新版MITRE API检查CVE是否存在
         query_cve_url = "https://cveawg.mitre.org/api/cve/" + cve
         response = http_session.get(query_cve_url, timeout=10)
         # 如果HTTP状态码是200，说明CVE存在
         if response.status_code == 200:
             return 1
-        else:
-            return 0
     except Exception as e:
-        logger.error(f"检查CVE {cve} 存在性失败: {e}")
-        return 0
+        logger.error(f"使用API检查CVE {cve} 存在性失败: {e}")
+    
+    # 如果API失败，尝试使用旧版HTML页面检查
+    try:
+        query_cve_url = "https://cve.mitre.org/cgi-bin/cvename.cgi?name=" + cve
+        response = http_session.get(query_cve_url, timeout=10)
+        # 检查页面是否包含CVE信息，而不是404页面
+        if response.status_code == 200:
+            # 简单检查页面内容，看是否包含CVE信息
+            if cve in response.text and "CVE" in response.text:
+                return 1
+    except Exception as e:
+        logger.error(f"使用HTML页面检查CVE {cve} 存在性失败: {e}")
+    
+    # 如果所有方法都失败，返回0（不存在）
+    return 0
 
 # 关键词检测函数，判断项目是否与关键词相关
 def is_keyword_relevant(repo, keyword):
@@ -1404,15 +1416,15 @@ def get_cve_des_zh(cve, github_url=None):
                 # 提取发布时间
                 cve_time = data.get('cveMetadata', {}).get('datePublished', '') or data.get('published', '')
                 if cve_time:
-                    # 格式化时间，兼容Python 3.6及以下版本
+                    # 格式化时间，使用dateutil模块兼容所有Python版本
                     import datetime
                     try:
-                        # 尝试使用fromisoformat（Python 3.7+）
-                        cve_time = datetime.datetime.fromisoformat(cve_time.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
-                    except AttributeError:
-                        # 兼容旧版本Python
-                        import dateutil.parser
-                        cve_time = dateutil.parser.isoparse(cve_time).strftime('%Y-%m-%d %H:%M:%S')
+                        # 尝试使用dateutil.parser.isoparse，兼容所有Python版本
+                        from dateutil.parser import isoparse
+                        cve_time = isoparse(cve_time).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception as e:
+                        logger.error(f"解析CVE {cve} 时间失败: {e}")
+                        cve_time = "未知时间"
                 else:
                     cve_time = "未知时间"
                 
@@ -1435,7 +1447,7 @@ def get_cve_des_zh(cve, github_url=None):
                 return translated_des, cve_time
             return des, cve_time
         
-        # 如果CVE API获取失败，尝试从GitHub README获取信息
+        # 如果CVE API获取失败，尝试从GitHub获取信息
         if github_url:
             logger.info(f"尝试从GitHub URL获取CVE {cve} 信息: {github_url}")
             try:
@@ -1444,42 +1456,60 @@ def get_cve_des_zh(cve, github_url=None):
                 match = re.match(r'https://github.com/([^/]+)/([^/]+)', github_url)
                 if match:
                     owner, repo = match.groups()
-                    # 获取GitHub仓库的README
-                    readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
-                    readme_response = http_session.get(readme_url, headers=github_headers, timeout=10)
                     
-                    if readme_response.status_code == 200:
-                        readme_data = readme_response.json()
-                        import base64
-                        # 解码README内容
-                        readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
+                    # 先获取仓库基本信息，包含描述和推送时间
+                    repo_url = f"https://api.github.com/repos/{owner}/{repo}"
+                    repo_response = http_session.get(repo_url, headers=github_headers, timeout=10)
+                    if repo_response.status_code == 200:
+                        repo_data = repo_response.json()
                         
-                        # 使用README的所有内容作为描述
-                        des = readme_content.strip()
-                        if not des:
-                            des = "GitHub仓库README内容为空"
+                        # 使用仓库描述作为CVE描述
+                        repo_des = repo_data.get('description', '')
+                        # 如果描述为空，使用仓库名称作为备选
+                        if not repo_des.strip():
+                            repo_des = f"{owner}/{repo}"
                         
-                        # 获取仓库的推送时间
-                        repo_url = f"https://api.github.com/repos/{owner}/{repo}"
-                        repo_response = http_session.get(repo_url, headers=github_headers, timeout=10)
-                        if repo_response.status_code == 200:
-                            repo_data = repo_response.json()
-                            pushed_at = repo_data.get('pushed_at', '')
-                            if pushed_at:
-                                import datetime
-                                try:
-                                    # 尝试使用fromisoformat（Python 3.7+）
-                                    cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
-                                except AttributeError:
-                                    # 兼容旧版本Python
-                                    import dateutil.parser
-                                    cve_time = dateutil.parser.isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
+                        # 获取仓库推送时间
+                        pushed_at = repo_data.get('pushed_at', '')
+                        repo_time = "未知时间"
+                        if pushed_at:
+                            import datetime
+                            try:
+                                # 尝试使用dateutil.parser.isoparse，兼容所有Python版本
+                                from dateutil.parser import isoparse
+                                repo_time = isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
+                            except Exception as e:
+                                logger.error(f"解析GitHub仓库推送时间失败: {e}")
+                                repo_time = "未知时间"
+                        
+                        # 然后尝试获取README，优先使用README内容
+                        readme_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
+                        readme_response = http_session.get(readme_url, headers=github_headers, timeout=10)
+                        
+                        if readme_response.status_code == 200:
+                            readme_data = readme_response.json()
+                            import base64
+                            # 解码README内容
+                            readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
+                            
+                            # 使用README的所有内容作为描述
+                            readme_des = readme_content.strip()
+                            if readme_des:
+                                des = readme_des
+                                cve_time = repo_time
+                                logger.info(f"从GitHub README成功获取CVE {cve} 信息")
                             else:
-                                cve_time = "未知时间"
-                        
-                        logger.info(f"从GitHub成功获取CVE {cve} 信息")
+                                # 如果README为空，使用仓库描述
+                                des = repo_des
+                                cve_time = repo_time
+                                logger.info(f"从GitHub仓库信息成功获取CVE {cve} 信息")
+                        else:
+                            # 如果README获取失败，使用仓库描述
+                            des = repo_des
+                            cve_time = repo_time
+                            logger.info(f"从GitHub仓库信息成功获取CVE {cve} 信息")
                     else:
-                        logger.error(f"获取GitHub README失败: {readme_response.status_code}")
+                        logger.error(f"获取GitHub仓库信息失败: {repo_response.status_code}")
             except Exception as e_github:
                 logger.error(f"从GitHub获取CVE {cve} 信息失败: {e_github}")
         
@@ -1514,12 +1544,12 @@ def get_cve_des_zh(cve, github_url=None):
                         if pushed_at:
                             import datetime
                             try:
-                                # 尝试使用fromisoformat（Python 3.7+）
-                                cve_time = datetime.datetime.fromisoformat(pushed_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M:%S')
-                            except AttributeError:
-                                # 兼容旧版本Python
-                                import dateutil.parser
-                                cve_time = dateutil.parser.isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
+                                # 尝试使用dateutil.parser.isoparse，兼容所有Python版本
+                                from dateutil.parser import isoparse
+                                cve_time = isoparse(pushed_at).strftime('%Y-%m-%d %H:%M:%S')
+                            except Exception as e:
+                                logger.error(f"解析GitHub仓库推送时间失败: {e}")
+                                cve_time = "未知时间"
                         else:
                             cve_time = "未知时间"
                         
