@@ -1,6 +1,7 @@
 tools_list:
   - https://api.github.com/repos/Threekiii/Awesome-POC
   - https://api.github.com/repos/adysec/nuclei_poc
+  - https://github.com/SourByte05/Vulnerability-Wiki-PoC
 
 keyword_list:
  - cve-2025
