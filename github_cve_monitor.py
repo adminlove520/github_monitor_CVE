@@ -286,6 +286,10 @@ def init_config():
     
     
     
+    # 确保channel_config被正确设置为当前push_channel的配置
+    if push_channel and push_channel != '' and (not channel_config or len(channel_config) == 0):
+        channel_config = config.get(push_channel, [])
+    
     GLOBAL_CONFIG['push_channel']['type'] = push_channel
     
     # 根据推送渠道类型加载配置
