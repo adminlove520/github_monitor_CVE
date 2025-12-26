@@ -2492,7 +2492,7 @@ def generate_html_report(date, markdown_content, output_path):
 # 更新index.html
 
 def update_index_html(archive_dir):
-    """更新日报列表页"""
+    """更新Github监控页"""
     from jinja2 import Template
     
     # 定义index.html模板
@@ -2679,11 +2679,11 @@ def update_index_html(archive_dir):
         </header>
         
         <main>
-            <h2>日报列表</h2>
+            <h2>Github监控</h2>
             <ul class="report-list">
                 {% for report in reports %}
                 <li class="report-item">
-                    <a href="{{ report.date }}/{{ report.path }}" class="report-link" target="_blank">{{ report.date }}</a>
+                    <a href="archive/{{ report.date }}/{{ report.path }}" class="report-link" target="_blank">{{ report.date }}</a>
                     <div class="report-info">总更新数: {{ report.total_count }} | CVE数: {{ report.cve_count }} | 关键字监控数: {{ report.keyword_count }} | 红队工具更新数: {{ report.tools_count }}</div>
                 </li>
                 {% endfor %}
