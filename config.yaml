@@ -16,32 +16,32 @@ all_config:
   # 消息推送配置
   # 只需要启用一个推送渠道即可
   dingding:
-    - enable: 0          # 1=启用，0=禁用
+    - enable: OFF          # ON=启用，OFF=禁用
     - webhook: https://oapi.dingtalk.com/robot/send?access_token=
     - secretKey: 
     - app_name: dingding
   
   feishu:
-    - enable: 0          # 1=启用，0=禁用
+    - enable: OFF          # ON=启用，OFF=禁用
     - webhook: xxx       # 飞书机器人webhook
     - app_name: feishu
   
   tgbot:
-    - enable: 0          # 1=启用，0=禁用
+    - enable: OFF          # ON=启用，OFF=禁用
     - token: 123         # Telegram Bot Token
     - group_id: 123      # Telegram 群组ID
     - app_name: tgbot
   
   discard:
-    - enable: 1          # 1=启用，0=禁用
+    - enable: ON          # ON=启用，OFF=禁用
     - webhook: xxx       # Discard的webhook地址
-    - send_daily_report: 1  # 1=启用日报推送，0=禁用
-    - send_normal_msg: 0    # 1=启用普通消息推送，0=禁用
+    - send_daily_report: ON  # ON=启用日报推送，OFF=禁用
+    - send_normal_msg: OFF    # ON=启用普通消息推送，OFF=禁用
     - app_name: discard
 
   # 翻译配置
   translate:
-    - enable: 0          # 1=启用，0=禁用
+    - enable: OFF          # ON=启用，OFF=禁用
     # 启用后将翻译仓库描述等内容
     # 默认使用Google翻译，失败时自动降级到百度翻译
   

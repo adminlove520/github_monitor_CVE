@@ -244,10 +244,11 @@ def init_config():
     # 翻译配置
     translate_enable = os.environ.get('TRANSLATE_ENABLE', '')
     if translate_enable:
-        GLOBAL_CONFIG['translate'] = translate_enable == '1'
+        GLOBAL_CONFIG['translate'] = translate_enable.upper() == 'ON' or translate_enable == '1'
     else:
         try:
-            GLOBAL_CONFIG['translate'] = bool(int(config.get('translate', [{'enable': 0}])[0]['enable']))
+            translate_config = config.get('translate', [{'enable': 'OFF'}])[0]['enable']
+            GLOBAL_CONFIG['translate'] = translate_config.upper() == 'ON' if isinstance(translate_config, str) else bool(int(translate_config))
         except:
             GLOBAL_CONFIG['translate'] = False
     
@@ -271,9 +272,15 @@ def init_config():
             channel_config = config.get(channel, [])
             if len(channel_config) > 0:
                 try:
-                    if int(channel_config[0]['enable']) == 1:
-                        push_channel = channel
-                        break
+                    enable_value = channel_config[0]['enable']
+                    if isinstance(enable_value, str):
+                        if enable_value.upper() == 'ON':
+                            push_channel = channel
+                            break
+                    else:
+                        if int(enable_value) == 1:
+                            push_channel = channel
+                            break
                 except:
                     continue
     
@@ -303,20 +310,42 @@ def init_config():
         try:
             send_daily_report = os.environ.get('DISCARD_SEND_DAILY_REPORT', '')
             if send_daily_report and send_daily_report != '***':
-                GLOBAL_CONFIG['push_channel']['send_daily_report'] = int(send_daily_report)
+                # 只支持 ON/OFF 格式
+                GLOBAL_CONFIG['push_channel']['send_daily_report'] = 1 if send_daily_report.upper() == 'ON' else 0
             else:
-                GLOBAL_CONFIG['push_channel']['send_daily_report'] = channel_config[2]['send_daily_report'] if len(channel_config) > 2 else 0
-        except ValueError:
+                # 从配置文件读取，支持 ON/OFF 和数字格式
+                config_value = channel_config[2]['send_daily_report'] if len(channel_config) > 2 else 0
+                if isinstance(config_value, str):
+                    GLOBAL_CONFIG['push_channel']['send_daily_report'] = 1 if config_value.upper() == 'ON' else 0
+                else:
+                    GLOBAL_CONFIG['push_channel']['send_daily_report'] = config_value
+        except Exception as e:
             GLOBAL_CONFIG['push_channel']['send_daily_report'] = 0
         
         try:
             send_normal_msg = os.environ.get('DISCARD_SEND_NORMAL_MSG', '')
             if send_normal_msg and send_normal_msg != '***':
-                GLOBAL_CONFIG['push_channel']['send_normal_msg'] = int(send_normal_msg)
+                # 只支持 ON/OFF 格式
+                GLOBAL_CONFIG['push_channel']['send_normal_msg'] = 1 if send_normal_msg.upper() == 'ON' else 0
             else:
-                GLOBAL_CONFIG['push_channel']['send_normal_msg'] = channel_config[3]['send_normal_msg'] if len(channel_config) > 3 else 1
-        except ValueError:
+                # 从配置文件读取，支持 ON/OFF 和数字格式
+                config_value = channel_config[3]['send_normal_msg'] if len(channel_config) > 3 else 1
+                if isinstance(config_value, str):
+                    GLOBAL_CONFIG['push_channel']['send_normal_msg'] = 1 if config_value.upper() == 'ON' else 0
+                else:
+                    GLOBAL_CONFIG['push_channel']['send_normal_msg'] = config_value
+        except Exception as e:
             GLOBAL_CONFIG['push_channel']['send_normal_msg'] = 1
+        
+        # 处理 DISCARD_SWITCH 环境变量（可选，用于控制推送开关）
+        try:
+            discard_switch = os.environ.get('DISCARD_SWITCH', '')
+            if discard_switch and discard_switch != '***':
+                # DISCARD_SWITCH 是 ON/OFF 格式，用于控制是否启用推送
+                GLOBAL_CONFIG['workflow']['push_switch'] = discard_switch
+        except Exception as e:
+            # 如果处理失败，保留原来的 push_switch 配置
+            pass
     
     # 加载 workflow dispatch 输入配置
     GLOBAL_CONFIG['workflow']['night_sleep_switch'] = os.environ.get('NIGHT_SLEEP_SWITCH', 'ON')
@@ -707,25 +736,38 @@ def get_pushed_at_time(tools_list):
     tools_info_list = []
     for url in tools_list:
         try:
-            tools_json = http_session.get(url, headers=github_headers, timeout=10).json()
+            # 将 GitHub 仓库 URL 转换为 API URL
+            import re
+            github_url_match = re.match(r'https://github.com/([^/]+)/([^/]+)', url)
+            if github_url_match:
+                owner, repo = github_url_match.groups()
+                api_url = f"https://api.github.com/repos/{owner}/{repo}"
+            elif url.startswith("https://api.github.com/repos/"):
+                api_url = url
+            else:
+                print(f"[警告] 无效的 GitHub URL: {url}")
+                continue
+            
+            tools_json = http_session.get(api_url, headers=github_headers, timeout=10).json()
             
             # 检查关键字段是否存在
-            if 'pushed_at' in tools_json and 'name' in tools_json and 'url' in tools_json:
+            if 'pushed_at' in tools_json and 'name' in tools_json:
                 pushed_at_tmp = tools_json['pushed_at']
                 pushed_at = re.findall(r'\d{4}-\d{2}-\d{2}', pushed_at_tmp)[0] if pushed_at_tmp else datetime.date.today().strftime('%Y-%m-%d')
                 tools_name = tools_json['name']
-                api_url = tools_json['url']
+                html_url = tools_json.get('html_url', '')
                 
                 try:
-                    releases_json = http_session.get(url+"/releases", headers=github_headers, timeout=10).json()
+                    releases_url = f"{api_url}/releases"
+                    releases_json = http_session.get(releases_url, headers=github_headers, timeout=10).json()
                     tag_name = releases_json[0]['tag_name'] if releases_json and len(releases_json) > 0 else "no releases"
                 except Exception as e:
                     tag_name = "no releases"
                 
-                tools_info_list.append({"tools_name":tools_name,"pushed_at":pushed_at,"api_url":api_url,"tag_name":tag_name})
+                tools_info_list.append({"tools_name":tools_name,"pushed_at":pushed_at,"api_url":html_url,"tag_name":tag_name})
             else:
-                print(f"[警告] API返回数据缺少关键字段: {url}")
-                print(f"[调试] API返回: {json.dumps(tools_json, ensure_ascii=False)[:100]}...")
+                print(f"[警告] API返回数据缺少关键字段: {api_url}")
+                print(f"[调试] API返回: {str(tools_json)[:100]}...")
         except Exception as e:
             print(f"get_pushed_at_time 处理 {url} 时出错: {e}")
             pass
@@ -1361,25 +1403,45 @@ def discard(text, msg, webhook, send_normal_msg=1, is_daily_report=False, html_f
         if is_daily_report and html_file:
             # 推送日报
             current_date = time.strftime('%Y-%m-%d', time.localtime())
-            push_content = f"**{text}**\n{msg}\n\n日报内容预览：\n"
+            push_content = f"📅 **{text}**\n📊 {msg}\n\n"
             
             if markdown_content:
                 # 提取markdown内容中的文章列表
                 lines = markdown_content.split('\n')
-                preview_content = []
-                include_lines = False
+                category = ""
+                category_items = []
+                
                 for line in lines:
-                    if line.startswith('## '):
-                        include_lines = True
                     if line.strip().startswith('Power By') or line.strip().startswith('---'):
                         continue
-                    if include_lines:
-                        preview_content.append(line)
+                    
+                    if line.startswith('## '):
+                        # 处理新分类
+                        if category and category_items:
+                            # 添加之前的分类
+                            push_content += f"\n🔖 **{category}**\n"
+                            push_content += '\n'.join(category_items)
+                            push_content += '\n'
+                        # 重置分类和内容
+                        category = line[3:].strip()  # 移除 ## 前缀
+                        category_items = []
+                    elif line.startswith('- [') and category:  # 处理列表项
+                        # 优化链接格式
+                        item_text = line.strip()
+                        category_items.append(item_text)
                 
-                filtered_preview = [line for line in preview_content if line.strip()]
-                push_content += '\n'.join(filtered_preview[:10])  # 只显示前10条
-                if len(filtered_preview) > 10:
-                    push_content += f"\n... 等共{len(filtered_preview)}篇文章"
+                # 添加最后一个分类
+                if category and category_items:
+                    push_content += f"\n🔖 **{category}**\n"
+                    push_content += '\n'.join(category_items)
+                    push_content += '\n'
+            
+            # 添加底部信息
+            # 构建GitHub Pages的完整日报链接
+            current_date = time.strftime('%Y-%m-%d', time.localtime())
+            github_pages_url = f"https://adminlove520.github.io/github_monitor/archive/{current_date}/Daily_{current_date}.html"
+            push_content += f"\n🌐 [查看完整日报]({github_pages_url})\n"
+            push_content += f"🔗 [隐侠安全客栈](https://www.dfyxsec.com/)"
             
             data = {
                 "content": push_content
@@ -2362,7 +2424,7 @@ def generate_html_report(date, markdown_content, output_path):
         </div>
         
         <footer>
-            <p>Powered by GitHub Monitor</p>
+            <p style="text-align: center; margin: 0;">Power By 东方隐侠安全团队·Anonymous@ <a href="https://www.dfyxsec.com/" style="color: white; text-decoration: underline;">隐侠安全客栈</a></p>
         </footer>
     </body>
     </html>
@@ -2618,7 +2680,7 @@ def update_index_html(archive_dir):
         </main>
         
         <footer>
-            <p>Generated by GitHub Monitor</p>
+            <p style="text-align: center; margin: 0;">Power By 东方隐侠安全团 队·Anonymous@ <a href="https://www.dfyxsec.com/" style="color: white; text-decoration: underline;">隐侠安全客栈</a></p>
         </footer>
     </body>
     </html>
@@ -2782,6 +2844,15 @@ if __name__ == '__main__':
     create_database()
     # 主动加载黑名单配置，确保日志显示
     load_black_user()
+    
+    # 输出配置信息
+    print("\n=== GitHub 监控配置 ===")
+    print("配置加载成功！")
+    print(f"推送渠道类型: {GLOBAL_CONFIG['push_channel']['type']}")
+    print(f"推送开关: {GLOBAL_CONFIG['workflow']['push_switch']}")
+    print(f"日报开关: {GLOBAL_CONFIG['workflow']['daily_report_switch']}")
+    print(f"夜间休眠开关: {GLOBAL_CONFIG['workflow']['night_sleep_switch']}")
+    print(f"翻译功能: {GLOBAL_CONFIG['translate']}")
     
     # 检查是否在GitHub Actions环境中运行
     is_github_actions = os.environ.get('GITHUB_ACTIONS') == 'true'
