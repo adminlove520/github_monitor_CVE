@@ -73,6 +73,11 @@ GLOBAL_CONFIG = {
         'group_id': '',
         'send_daily_report': 0,
         'send_normal_msg': 1
+    },
+    'workflow': {
+        'night_sleep_switch': 'ON',
+        'daily_report_switch': 'ON',
+        'push_switch': 'ON'
     }
 }
 
@@ -127,6 +132,13 @@ class MessageQueue:
     
     def send_messages(self):
         """发送队列中的消息，处理速率限制"""
+        # 检查推送开关
+        if GLOBAL_CONFIG['workflow']['push_switch'] != 'ON':
+            print("[+] 推送功能已关闭")
+            # 清空队列，避免消息积压
+            self.queue = []
+            return 0
+            
         global last_send_time, message_count
         
         current_time = time.time()
@@ -286,10 +298,30 @@ def init_config():
     elif push_channel == 'discard':
         GLOBAL_CONFIG['push_channel']['webhook'] = os.environ.get('DISCARD_WEBHOOK', 
                                                             channel_config[1]['webhook'] if len(channel_config) > 1 else '')
-        GLOBAL_CONFIG['push_channel']['send_daily_report'] = int(os.environ.get('DISCARD_SEND_DAILY_REPORT', 
-                                                         channel_config[2]['send_daily_report'] if len(channel_config) > 2 else 0))
-        GLOBAL_CONFIG['push_channel']['send_normal_msg'] = int(os.environ.get('DISCARD_SEND_NORMAL_MSG', 
-                                                        channel_config[3]['send_normal_msg'] if len(channel_config) > 3 else 1))
+        
+        # 安全处理环境变量转换，防止'***'等无效值
+        try:
+            send_daily_report = os.environ.get('DISCARD_SEND_DAILY_REPORT', '')
+            if send_daily_report and send_daily_report != '***':
+                GLOBAL_CONFIG['push_channel']['send_daily_report'] = int(send_daily_report)
+            else:
+                GLOBAL_CONFIG['push_channel']['send_daily_report'] = channel_config[2]['send_daily_report'] if len(channel_config) > 2 else 0
+        except ValueError:
+            GLOBAL_CONFIG['push_channel']['send_daily_report'] = 0
+        
+        try:
+            send_normal_msg = os.environ.get('DISCARD_SEND_NORMAL_MSG', '')
+            if send_normal_msg and send_normal_msg != '***':
+                GLOBAL_CONFIG['push_channel']['send_normal_msg'] = int(send_normal_msg)
+            else:
+                GLOBAL_CONFIG['push_channel']['send_normal_msg'] = channel_config[3]['send_normal_msg'] if len(channel_config) > 3 else 1
+        except ValueError:
+            GLOBAL_CONFIG['push_channel']['send_normal_msg'] = 1
+    
+    # 加载 workflow dispatch 输入配置
+    GLOBAL_CONFIG['workflow']['night_sleep_switch'] = os.environ.get('NIGHT_SLEEP_SWITCH', 'ON')
+    GLOBAL_CONFIG['workflow']['daily_report_switch'] = os.environ.get('DAILY_REPORT_SWITCH', 'ON')
+    GLOBAL_CONFIG['workflow']['push_switch'] = os.environ.get('PUSH_SWITCH', 'ON')
 
 # 读取配置文件 - 兼容旧代码
 def load_config():
@@ -1005,6 +1037,11 @@ def is_night_time():
     import pytz
     
     try:
+        # 首先检查夜间休眠开关是否开启
+        night_sleep_switch = GLOBAL_CONFIG['workflow']['night_sleep_switch']
+        if night_sleep_switch != 'ON':
+            return False
+        
         # 获取当前北京时间
         beijing_tz = pytz.timezone('Asia/Shanghai')
         now = datetime.datetime.now(beijing_tz)
@@ -1309,6 +1346,11 @@ def tgbot(text, msg,token,group_id):
 # 添加Discard推送支持
 def discard(text, msg, webhook, send_normal_msg=1, is_daily_report=False, html_file=None, markdown_content=None):
     try:
+        # 检查推送开关
+        if GLOBAL_CONFIG['workflow']['push_switch'] != 'ON':
+            print("[+] 推送功能已关闭")
+            return
+            
         if send_normal_msg == 0 and not is_daily_report:
             return
         
@@ -2335,19 +2377,19 @@ def generate_html_report(date, markdown_content, output_path):
         
         # 从Markdown中提取统计数据
         import re
-        total_match = re.search(r'总更新数：(\d+)', markdown_content)
+        total_match = re.search(r'总更新数量：(\d+)', markdown_content)
         if total_match:
             total_count = total_match.group(1)
         
-        cve_match = re.search(r'CVE数：(\d+)', markdown_content)
+        cve_match = re.search(r'CVE数量：(\d+)', markdown_content)
         if cve_match:
             cve_count = cve_match.group(1)
         
-        keyword_match = re.search(r'关键字监控数：(\d+)', markdown_content)
+        keyword_match = re.search(r'关键字监控数量：(\d+)', markdown_content)
         if keyword_match:
             keyword_count = keyword_match.group(1)
         
-        tools_match = re.search(r'红队工具数：(\d+)', markdown_content)
+        tools_match = re.search(r'红队工具更新数量：(\d+)', markdown_content)
         if tools_match:
             tools_count = tools_match.group(1)
         
@@ -2608,19 +2650,19 @@ def update_index_html(archive_dir):
                             with open(file_path, 'r', encoding='utf-8') as f:
                                 content = f.read()
                                 # 从HTML中提取统计数据
-                                total_match = re.search(r'总更新数.*?(\d+)', content)
+                                total_match = re.search(r'总更新数量.*?(\d+)', content)
                                 if total_match:
                                     total_count = total_match.group(1)
                                 
-                                cve_match = re.search(r'CVE数.*?(\d+)', content)
+                                cve_match = re.search(r'CVE数量.*?(\d+)', content)
                                 if cve_match:
                                     cve_count = cve_match.group(1)
                                 
-                                keyword_match = re.search(r'关键字监控数.*?(\d+)', content)
+                                keyword_match = re.search(r'关键字监控数量.*?(\d+)', content)
                                 if keyword_match:
                                     keyword_count = keyword_match.group(1)
                                 
-                                tools_match = re.search(r'红队工具更新数.*?(\d+)', content)
+                                tools_match = re.search(r'红队工具更新数量.*?(\d+)', content)
                                 if tools_match:
                                     tools_count = tools_match.group(1)
                         except Exception as e:
@@ -2645,8 +2687,8 @@ def update_index_html(archive_dir):
         template = Template(index_template)
         html_content = template.render(reports=reports)
         
-        # 写入index.html文件
-        index_path = os.path.join(archive_dir, 'index.html')
+        # 写入index.html文件到根目录
+        index_path = os.path.join(os.path.dirname(archive_dir), 'index.html')
         with open(index_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
         
@@ -2794,7 +2836,10 @@ if __name__ == '__main__':
                 print("main函数 try循环 遇到错误-->{}" .format(e))
         
         # 生成日报，传入运行结果数据
-        generate_daily_report(today_cve_data, all_today_keyword_data, data3)
+        if GLOBAL_CONFIG['workflow']['daily_report_switch'] == 'ON':
+            generate_daily_report(today_cve_data, all_today_keyword_data, data3)
+        else:
+            print("[+] 日报生成已关闭")
 
         print("\r\n\t\t  监控完成！ \t\t\r\n")
     else:
@@ -2852,7 +2897,10 @@ if __name__ == '__main__':
                     print("main函数 try循环 遇到错误-->{}" .format(e))
             
             # 生成日报，传入运行结果数据
-            generate_daily_report(today_cve_data, all_today_keyword_data, data3)
+            if GLOBAL_CONFIG['workflow']['daily_report_switch'] == 'ON':
+                generate_daily_report(today_cve_data, all_today_keyword_data, data3)
+            else:
+                print("[+] 日报生成已关闭")
 
             print("\r\n\t\t  等待下一次监控... \t\t\r\n")
             time.sleep(5*60)

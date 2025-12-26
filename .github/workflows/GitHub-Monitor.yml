@@ -5,6 +5,31 @@ on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:  # 支持手动触发
+    inputs:
+      night_sleep_switch:
+        description: '是否开启夜间休眠（北京时间0-7点跳过推送）'
+        required: true
+        default: 'OFF'
+        type: choice
+        options:
+          - ON
+          - OFF
+      daily_report_switch:
+        description: '是否生成日报'
+        required: true
+        default: 'ON'
+        type: choice
+        options:
+          - ON
+          - OFF
+      push_switch:
+        description: '是否进行推送'
+        required: true
+        default: 'ON'
+        type: choice
+        options:
+          - ON
+          - OFF
   push:
     branches: [ main ]  # 代码推送时触发
 
@@ -30,9 +55,9 @@ jobs:
           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
           # Discard推送环境变量支持
           DISCARD_WEBHOOK: ${{ secrets.DISCARD_WEBHOOK }}
-          DISCARD_SWITCH: ${{ secrets.DISCARD_SWITCH }}
-          DISCARD_SEND_DAILY_REPORT: ${{ secrets.DISCARD_SEND_DAILY_REPORT }}
-          DISCARD_SEND_NORMAL_MSG: ${{ secrets.DISCARD_SEND_NORMAL_MSG }}
+          DISCARD_SWITCH: ${{ github.event.inputs.push_switch || secrets.DISCARD_SWITCH || 'ON' }}
+          DISCARD_SEND_DAILY_REPORT: ${{ secrets.DISCARD_SEND_DAILY_REPORT || 'OFF' }}
+          DISCARD_SEND_NORMAL_MSG: ${{ secrets.DISCARD_SEND_NORMAL_MSG || 'ON' }}
           # Feishu推送环境变量支持
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           # TGBot推送环境变量支持
@@ -41,6 +66,10 @@ jobs:
           # 百度翻译环境变量支持
           BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
           BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
+          # Workflow Dispatch 输入转换为环境变量
+          NIGHT_SLEEP_SWITCH: ${{ github.event.inputs.night_sleep_switch || secrets.NIGHT_SLEEP_SWITCH || 'ON' }}
+          DAILY_REPORT_SWITCH: ${{ github.event.inputs.daily_report_switch || secrets.DAILY_REPORT_SWITCH || 'ON' }}
+          PUSH_SWITCH: ${{ github.event.inputs.push_switch || secrets.PUSH_SWITCH || 'ON' }}
         run: python ./github_cve_monitor.py
 
       - name: Commit
