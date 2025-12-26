@@ -1,0 +1,58 @@
+name: add_tools_list
+
+description: 提交一个新的安全工具，将被添加到tools_list.yaml中（GitHub仓库、关键词或用户）
+
+title: "添加安全工具: "
+
+labels: [add-tools]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请按照以下格式提交新的安全工具，系统会自动处理并添加到tools_list.yaml中。
+        感谢您的贡献！
+
+  - type: dropdown
+    id: entry-type
+    attributes:
+      label: 工具类型
+      description: 请选择您要提交的安全工具类型
+      options:
+        - GitHub仓库 (tools_list)
+        - 监控关键词 (keyword_list)
+        - GitHub用户 (user_list)
+    validations:
+      required: true
+
+  - type: input
+    id: entry-value
+    attributes:
+      label: 工具值
+      description: |
+        请输入您要添加的安全工具值：
+        - 如果是GitHub仓库，请输入完整的GitHub API URL，例如：https://api.github.com/repos/Threekiii/Awesome-POC
+        - 如果是监控关键词，请输入要监控的安全相关关键词，例如：免杀
+        - 如果是GitHub用户，请输入GitHub用户名，例如：adminlove520
+      placeholder: 请输入工具值
+    validations:
+      required: true
+      pattern: ^(https?://api.github.com/repos/[^/]+/[^/]+|[^\s]+|[^\s]+)$
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 描述（可选）
+      description: 可以添加安全工具的描述信息
+      placeholder: 这是一个安全工具仓库，提供各种POC和EXP
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 确认信息
+      description: 请确认以下信息
+      options:
+        - label: 我已确认该安全工具内容合法合规
+          required: true
+        - label: 我已确认该安全工具未在tools_list.yaml中存在
+          required: true
