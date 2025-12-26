@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub监控日报 {{ date }}</title>
+    <style>
+        /* 全局样式重置和基础设置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.7;
+            color: #2c3e50;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        /* 主容器样式 */
+        .container {
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        
+        .info-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            font-weight: 500;
+        }
+        
+        /* 导航链接样式 */
+        .nav-section {
+            padding: 20px 40px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .back-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 主要内容区域 */
+        main {
+            padding: 40px;
+        }
+        
+        /* 文章列表样式 */
+        .articles-container {
+            display: grid;
+            gap: 24px;
+        }
+        
+        .article-card {
+            background-color: white;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .article-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+            border-color: #4facfe;
+        }
+        
+        .article-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .article-title a {
+            color: #2c3e50;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .article-title a:hover {
+            color: #4facfe;
+        }
+        
+        .article-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #f1f3f5;
+        }
+        
+        /* 统计信息卡片 */
+        .stats-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .stats-card h2 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        /* 空状态样式 */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        
+        /* 页脚样式 */
+        footer {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            text-align: center;
+            padding: 30px 40px;
+            border-top: 1px solid #e9ecef;
+            font-size: 0.9rem;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            header {
+                padding: 30px 20px;
+            }
+            
+            .header-info {
+                gap: 15px;
+            }
+            
+            .info-item {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
+            
+            main {
+                padding: 20px;
+            }
+            
+            .nav-section {
+                padding: 15px 20px;
+            }
+            
+            .article-card {
+                padding: 20px;
+            }
+            
+            .article-title {
+                font-size: 1.1rem;
+            }
+        }
+        
+        /* 加载动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .article-card {
+            animation: fadeInUp 0.5s ease-out;
+        }
+        
+        .article-card:nth-child(1) { animation-delay: 0.1s; }
+        .article-card:nth-child(2) { animation-delay: 0.2s; }
+        .article-card:nth-child(3) { animation-delay: 0.3s; }
+        .article-card:nth-child(4) { animation-delay: 0.4s; }
+        .article-card:nth-child(5) { animation-delay: 0.5s; }
+        .article-card:nth-child(n+6) { animation-delay: 0.6s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GitHub监控日报 {{ date }}</h1>
+            <div class="header-info">
+                <div class="info-item">共收集到 {{ count }} 篇文章</div>
+                <div class="info-item">最后更新时间：{{ update_time }}</div>
+            </div>
+        </header>
+        
+        <div class="nav-section">
+            <a href="index.html" class="back-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                返回日报列表
+            </a>
+        </div>
+        
+        <main>
+            <div class="stats-card">
+                <h2>今日统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ count }}</div>
+                        <div class="stat-label">总文章数</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="articles-container">
+                {% if articles %}
+                    {% for article in articles %}
+                    <article class="article-card">
+                        <h2 class="article-title"><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
+                        <div class="article-meta">
+                            <span>发布时间：{{ article.timestamp }}</span>
+                            <span><a href="{{ article.link }}" target="_blank" style="color: #4facfe; text-decoration: none;">查看详情 →</a></span>
+                        </div>
+                    </article>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <h3>暂无更新内容</h3>
+                        <p>今天没有新的监控内容，欢迎稍后再来查看。</p>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+        
+        <footer>
+            <p>Power By GitHub Monitor</p>
+        </footer>
+    </div>
+</body>
+</html>

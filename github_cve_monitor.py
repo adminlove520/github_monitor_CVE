@@ -70,7 +70,9 @@ GLOBAL_CONFIG = {
         'webhook': '',
         'secretKey': '',
         'token': '',
-        'group_id': ''
+        'group_id': '',
+        'send_daily_report': 0,
+        'send_normal_msg': 1
     }
 }
 
@@ -249,9 +251,11 @@ def init_config():
         push_channel = 'feishu'
     elif os.environ.get('TG_BOT_TOKEN'):
         push_channel = 'tgbot'
+    elif os.environ.get('DISCARD_WEBHOOK'):
+        push_channel = 'discard'
     else:
         # 从配置文件检测
-        for channel in ['dingding', 'feishu', 'tgbot']:
+        for channel in ['dingding', 'feishu', 'tgbot', 'discard']:
             channel_config = config.get(channel, [])
             if len(channel_config) > 0:
                 try:
@@ -268,9 +272,9 @@ def init_config():
     # 根据推送渠道类型加载配置
     if push_channel == 'dingding':
         GLOBAL_CONFIG['push_channel']['webhook'] = os.environ.get('DINGDING_WEBHOOK', 
-                                                             channel_config[1]['webhook'] if len(channel_config) > 1 else '')
+                                                         channel_config[1]['webhook'] if len(channel_config) > 1 else '')
         GLOBAL_CONFIG['push_channel']['secretKey'] = os.environ.get('DINGDING_SECRETKEY', 
-                                                               channel_config[2]['secretKey'] if len(channel_config) > 2 else '')
+                                                           channel_config[2]['secretKey'] if len(channel_config) > 2 else '')
     elif push_channel == 'feishu':
         GLOBAL_CONFIG['push_channel']['webhook'] = os.environ.get('FEISHU_WEBHOOK', 
                                                             channel_config[1]['webhook'] if len(channel_config) > 1 else '')
@@ -279,6 +283,13 @@ def init_config():
                                                            channel_config[1]['token'] if len(channel_config) > 1 else '')
         GLOBAL_CONFIG['push_channel']['group_id'] = os.environ.get('TG_GROUP_ID', 
                                                               channel_config[2]['group_id'] if len(channel_config) > 2 else '')
+    elif push_channel == 'discard':
+        GLOBAL_CONFIG['push_channel']['webhook'] = os.environ.get('DISCARD_WEBHOOK', 
+                                                            channel_config[1]['webhook'] if len(channel_config) > 1 else '')
+        GLOBAL_CONFIG['push_channel']['send_daily_report'] = int(os.environ.get('DISCARD_SEND_DAILY_REPORT', 
+                                                         channel_config[2]['send_daily_report'] if len(channel_config) > 2 else 0))
+        GLOBAL_CONFIG['push_channel']['send_normal_msg'] = int(os.environ.get('DISCARD_SEND_NORMAL_MSG', 
+                                                        channel_config[3]['send_normal_msg'] if len(channel_config) > 3 else 1))
 
 # 读取配置文件 - 兼容旧代码
 def load_config():
@@ -293,6 +304,8 @@ def load_config():
         return 'feishu', GLOBAL_CONFIG['github_token'], channel['webhook'], channel['webhook'], GLOBAL_CONFIG['translate']
     elif channel_type == 'tgbot':
         return 'tgbot', GLOBAL_CONFIG['github_token'], channel['token'], channel['group_id'], GLOBAL_CONFIG['translate']
+    elif channel_type == 'discard':
+        return 'discard', GLOBAL_CONFIG['github_token'], channel['webhook'], channel['webhook'], GLOBAL_CONFIG['translate']
     else:
         print("[-] 配置文件有误, 未找到启用的推送渠道")
         return '', '', '', '', False
@@ -635,12 +648,12 @@ def load_tools_list():
         keyword_list = list_data.get('keyword_list', [])
         user_list = list_data.get('user_list', [])
         
-        # 从环境变量中读取keywords，如果存在则合并到keyword_list中
+        # 从环境变量中读取keywords，如果存在则直接使用环境变量中的关键词，不合并
         env_keywords = os.environ.get('keywords', '')
         if env_keywords:
-            env_keyword_list = [kw.strip() for kw in env_keywords.split(' ') if kw.strip()]
-            # 合并关键字列表，去重
-            keyword_list = list(set(keyword_list + env_keyword_list))
+            keyword_list = [kw.strip() for kw in env_keywords.split(' ') if kw.strip()]
+            # 去重
+            keyword_list = list(set(keyword_list))
         
         # 更新缓存
         TOOLS_LIST_CACHE = {
@@ -741,6 +754,8 @@ def getUserRepos(user):
                         dingding(text, body,load_config()[2],load_config()[3])
                     if load_config()[0] == "tgbot":
                         tgbot(text,body,load_config()[2],load_config()[3])
+                    if load_config()[0] == "discard":
+                        discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
     except Exception as e:
         print(e, "github链接不通")
 
@@ -810,6 +825,8 @@ def send_body(url,query_pushed_at,query_tag_name):
                     feishu(text,body,load_config()[2])
                 if load_config()[0] == "tgbot":
                     tgbot(text,body,load_config()[2],load_config()[3])
+                if load_config()[0] == "discard":
+                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
                 conn = sqlite3.connect('data.db')
                 cur = conn.cursor()
                 sql_grammar = "UPDATE redteam_tools_monitor SET pushed_at = '{}' WHERE tools_name='{}'" .format(new_pushed_at,tools_name)
@@ -831,9 +848,11 @@ def send_body(url,query_pushed_at,query_tag_name):
             if load_config()[0] == "dingding":
                 dingding(text, body, load_config()[2], load_config()[3])
             if load_config()[0] == "feishu":
-                feishu(text,body,load_config[2])
+                feishu(text,body,load_config()[2])
             if load_config()[0] == "tgbot":
                 tgbot(text, body, load_config()[2], load_config()[3])
+            if load_config()[0] == "discard":
+                discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
             conn = sqlite3.connect('data.db')
             cur = conn.cursor()
             sql_grammar = "UPDATE redteam_tools_monitor SET pushed_at = '{}' WHERE tools_name='{}'" .format(new_pushed_at,tools_name)
@@ -1287,6 +1306,58 @@ def tgbot(text, msg,token,group_id):
         print(f"Telegram推送失败: {e}")
         pass
 
+# 添加Discard推送支持
+def discard(text, msg, webhook, send_normal_msg=1, is_daily_report=False, html_file=None, markdown_content=None):
+    try:
+        if send_normal_msg == 0 and not is_daily_report:
+            return
+        
+        headers = {
+            "Content-Type": "application/json;charset=utf-8"
+        }
+        
+        if is_daily_report and html_file:
+            # 推送日报
+            current_date = time.strftime('%Y-%m-%d', time.localtime())
+            push_content = f"**{text}**\n{msg}\n\n日报内容预览：\n"
+            
+            if markdown_content:
+                # 提取markdown内容中的文章列表
+                lines = markdown_content.split('\n')
+                preview_content = []
+                include_lines = False
+                for line in lines:
+                    if line.startswith('## '):
+                        include_lines = True
+                    if line.strip().startswith('Power By') or line.strip().startswith('---'):
+                        continue
+                    if include_lines:
+                        preview_content.append(line)
+                
+                filtered_preview = [line for line in preview_content if line.strip()]
+                push_content += '\n'.join(filtered_preview[:10])  # 只显示前10条
+                if len(filtered_preview) > 10:
+                    push_content += f"\n... 等共{len(filtered_preview)}篇文章"
+            
+            data = {
+                "content": push_content
+            }
+        else:
+            # 推送普通消息
+            data = {
+                "content": f"**{text}**\n{msg}"
+            }
+        
+        response = http_session.post(webhook, json=data, headers=headers, timeout=10)
+        if response.status_code in [200, 204]:
+            print(f"Discard推送成功: {text}")
+        else:
+            print(f"Discard推送失败: HTTP状态码 - {response.status_code}")
+            print(f"响应内容: {response.text}")
+    except Exception as e:
+        print(f"Discard推送失败: {e}")
+        pass
+
 # 判断是否存在该CVE
 def exist_cve(cve):
     try:
@@ -1626,6 +1697,9 @@ def sendNews(data):
                 elif app_name == "tgbot":
                     tgbot(text, body, load_config()[2], load_config()[3])
                     logger.info(f"tgbot 发送 CVE {cve_name} 成功")
+                elif app_name == "discard":
+                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
+                    logger.info(f"discard 发送 CVE {cve_name} 成功")
             except IndexError as e:
                 logger.error(f"处理CVE数据时索引错误: {e}")
             except Exception as e:
@@ -1670,6 +1744,9 @@ def sendKeywordNews(keyword, data):
                 elif app_name == "tgbot":
                     tgbot(text, body, load_config()[2], load_config()[3])
                     logger.info(f"tgbot 发送关键字 {keyword} 的项目 {keyword_name} 成功")
+                elif app_name == "discard":
+                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
+                    logger.info(f"discard 发送关键字 {keyword} 的项目 {keyword_name} 成功")
             except Exception as e:
                 logger.error(f"处理关键字 {keyword} 的监控数据时出错: {e}")
                 pass
@@ -1681,11 +1758,15 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     import os
     today = datetime.date.today().strftime('%Y-%m-%d')
     archive_dir = 'archive'
-    report_path = os.path.join(archive_dir, f'Daily_{today}.md')
+    # 按照日期建立文件夹
+    daily_dir = os.path.join(archive_dir, today)
+    report_path = os.path.join(daily_dir, f'Daily_{today}.md')
     
-    # 创建archive目录如果不存在
+    # 创建archive目录和每日子目录如果不存在
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir)
+    if not os.path.exists(daily_dir):
+        os.makedirs(daily_dir)
     
     # 读取模板文件
     with open('temple.md', 'r', encoding='utf-8') as f:
@@ -1765,8 +1846,6 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     
     # 构建更新关键词
     keywords = []
-    tools_list, keyword_list, user_list = load_tools_list()
-    keywords.extend(keyword_list)
     if final_cve_data:
         keywords.append('CVE')
     if final_tools_data:
@@ -1836,8 +1915,6 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     
     # 构建更新关键词
     keywords = []
-    tools_list, keyword_list, user_list = load_tools_list()
-    keywords.extend(keyword_list)
     if final_cve_data:
         keywords.append('CVE')
     if final_tools_data:
@@ -1946,8 +2023,636 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     # 创建GitHub Issue
     create_github_issue(today, report_content)
     
+    # 生成HTML日报
+    html_report_path = os.path.join(daily_dir, f'Daily_{today}.html')
+    generate_html_report(today, report_content, html_report_path)
+    
+    # 更新index.html
+    update_index_html(archive_dir)
+    
+    # 推送日报到discard
+    app_name = load_config()[0]
+    if app_name == "discard" and GLOBAL_CONFIG['push_channel']['send_daily_report'] == 1:
+        text = f"GitHub监控日报 {today}"
+        msg = f"共收集到 {total_count} 条更新，其中CVE {cve_count} 条，关键字监控 {keyword_count} 条，红队工具 {tools_count} 条"
+        discard(text, msg, load_config()[2], is_daily_report=True, html_file=html_report_path, markdown_content=report_content)
+    
     print(f"日报已生成: {report_path}")
+    print(f"HTML日报已生成: {html_report_path}")
     return report_path
+
+# 生成HTML日报
+def generate_html_report(date, markdown_content, output_path):
+    """将Markdown格式的日报转换为HTML格式"""
+    import markdown
+    from jinja2 import Template
+    
+    # 定义HTML模板
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ title }}</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            
+            header {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                color: #333;
+                padding: 30px;
+                border-radius: 16px;
+                text-align: center;
+                margin-bottom: 30px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInDown 0.6s ease-out;
+            }
+            
+            h1 {
+                margin: 0;
+                font-size: 2.5rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 10px;
+            }
+            
+            h2 {
+                color: #667eea;
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 10px;
+                margin-top: 30px;
+                margin-bottom: 20px;
+                font-size: 1.8rem;
+            }
+            
+            h3 {
+                color: #333;
+                margin-top: 20px;
+                margin-bottom: 15px;
+                font-size: 1.4rem;
+            }
+            
+            ul {
+                list-style-type: none;
+                padding: 0;
+            }
+            
+            li {
+                margin-bottom: 15px;
+                padding: 15px;
+                background-color: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+            
+            li:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            }
+            
+            a {
+                color: #667eea;
+                text-decoration: none;
+                font-weight: 500;
+                transition: color 0.3s ease;
+            }
+            
+            a:hover {
+                color: #764ba2;
+                text-decoration: underline;
+            }
+            
+            .stats {
+                display: flex;
+                justify-content: space-around;
+                margin: 30px 0;
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInUp 0.6s ease-out 0.2s both;
+            }
+            
+            .stat-item {
+                text-align: center;
+                flex: 1;
+                padding: 0 20px;
+            }
+            
+            .stat-item:not(:last-child) {
+                border-right: 1px solid #e0e0e0;
+            }
+            
+            .stat-number {
+                font-size: 2.8rem;
+                font-weight: bold;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 5px;
+            }
+            
+            .stat-label {
+                color: #666;
+                font-size: 1.1rem;
+                font-weight: 500;
+            }
+            
+            .details {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                margin-bottom: 30px;
+                animation: fadeInUp 0.6s ease-out 0.4s both;
+            }
+            
+            footer {
+                text-align: center;
+                margin-top: 50px;
+                color: white;
+                font-size: 1rem;
+                background: rgba(0, 0, 0, 0.1);
+                padding: 20px;
+                border-radius: 12px;
+                animation: fadeIn 0.6s ease-out 0.6s both;
+            }
+            
+            /* 动画效果 */
+            @keyframes fadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            
+            /* 响应式设计 */
+            @media (max-width: 768px) {
+                body {
+                    padding: 10px;
+                }
+                
+                h1 {
+                    font-size: 2rem;
+                }
+                
+                h2 {
+                    font-size: 1.5rem;
+                }
+                
+                h3 {
+                    font-size: 1.2rem;
+                }
+                
+                .stats {
+                    flex-direction: column;
+                    gap: 20px;
+                    padding: 20px;
+                }
+                
+                .stat-item:not(:last-child) {
+                    border-right: none;
+                    border-bottom: 1px solid #e0e0e0;
+                    padding-bottom: 20px;
+                }
+                
+                .details {
+                    padding: 20px;
+                }
+                
+                header {
+                    padding: 20px;
+                }
+            }
+            
+            /* 卡片悬停效果 */
+            .card {
+                transition: all 0.3s ease;
+            }
+            
+            .card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            }
+            
+            /* 生成时间样式 */
+            .generate-time {
+                color: #666;
+                font-size: 1rem;
+                font-weight: 500;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>{{ title }}</h1>
+            <p class="generate-time">生成时间: {{ generate_time }}</p>
+        </header>
+        
+        <div class="stats card">
+            <div class="stat-item">
+                <div class="stat-number">{{ total_count }}</div>
+                <div class="stat-label">总更新数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{ cve_count }}</div>
+                <div class="stat-label">CVE数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{ keyword_count }}</div>
+                <div class="stat-label">关键字监控数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{ tools_count }}</div>
+                <div class="stat-label">红队工具数</div>
+            </div>
+        </div>
+        
+        <div class="details card">
+            {{ content | safe }}
+        </div>
+        
+        <footer>
+            <p>Powered by GitHub Monitor</p>
+        </footer>
+    </body>
+    </html>
+    """
+    
+    try:
+        # 解析Markdown内容，提取统计数据
+        total_count = 0
+        cve_count = 0
+        keyword_count = 0
+        tools_count = 0
+        
+        # 从Markdown中提取统计数据
+        import re
+        total_match = re.search(r'总更新数：(\d+)', markdown_content)
+        if total_match:
+            total_count = total_match.group(1)
+        
+        cve_match = re.search(r'CVE数：(\d+)', markdown_content)
+        if cve_match:
+            cve_count = cve_match.group(1)
+        
+        keyword_match = re.search(r'关键字监控数：(\d+)', markdown_content)
+        if keyword_match:
+            keyword_count = keyword_match.group(1)
+        
+        tools_match = re.search(r'红队工具数：(\d+)', markdown_content)
+        if tools_match:
+            tools_count = tools_match.group(1)
+        
+        # 将Markdown转换为HTML
+        html_content = markdown.markdown(markdown_content)
+        
+        # 渲染HTML模板
+        template = Template(html_template)
+        html_output = template.render(
+            title=f"GitHub监控日报 {date}",
+            generate_time=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+            total_count=total_count,
+            cve_count=cve_count,
+            keyword_count=keyword_count,
+            tools_count=tools_count,
+            content=html_content
+        )
+        
+        # 保存HTML文件
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_output)
+        
+        print(f"HTML日报已生成: {output_path}")
+    except Exception as e:
+        print(f"生成HTML日报失败: {e}")
+
+# 更新index.html
+
+def update_index_html(archive_dir):
+    """更新日报列表页"""
+    from jinja2 import Template
+    
+    # 定义index.html模板
+    index_template = """
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>GitHub监控日报</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            
+            header {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                color: #333;
+                padding: 30px;
+                border-radius: 16px;
+                text-align: center;
+                margin-bottom: 30px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInDown 0.6s ease-out;
+            }
+            
+            h1 {
+                margin: 0;
+                font-size: 2.5rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 10px;
+            }
+            
+            h2 {
+                color: #667eea;
+                margin-bottom: 20px;
+                font-size: 1.8rem;
+            }
+            
+            main {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInUp 0.6s ease-out 0.2s both;
+            }
+            
+            .report-list {
+                list-style: none;
+                padding: 0;
+            }
+            
+            .report-item {
+                background-color: white;
+                padding: 20px;
+                margin-bottom: 15px;
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+                animation: fadeInUp 0.6s ease-out 0.3s both;
+            }
+            
+            .report-item:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            }
+            
+            .report-link {
+                color: #667eea;
+                text-decoration: none;
+                font-size: 1.3rem;
+                font-weight: bold;
+                transition: color 0.3s ease;
+            }
+            
+            .report-link:hover {
+                color: #764ba2;
+                text-decoration: underline;
+            }
+            
+            .report-info {
+                color: #666;
+                font-size: 1rem;
+                margin-top: 5px;
+            }
+            
+            footer {
+                text-align: center;
+                margin-top: 50px;
+                color: white;
+                font-size: 1rem;
+                background: rgba(0, 0, 0, 0.1);
+                padding: 20px;
+                border-radius: 12px;
+                animation: fadeIn 0.6s ease-out 0.6s both;
+            }
+            
+            /* 动画效果 */
+            @keyframes fadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            
+            /* 响应式设计 */
+            @media (max-width: 768px) {
+                body {
+                    padding: 10px;
+                }
+                
+                h1 {
+                    font-size: 2rem;
+                }
+                
+                h2 {
+                    font-size: 1.5rem;
+                }
+                
+                main {
+                    padding: 20px;
+                }
+                
+                .report-item {
+                    padding: 15px;
+                }
+                
+                .report-link {
+                    font-size: 1.1rem;
+                }
+                
+                header {
+                    padding: 20px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>GitHub监控日报</h1>
+            <div>每日Github监控汇总</div>
+        </header>
+        
+        <main>
+            <h2>日报列表</h2>
+            <ul class="report-list">
+                {% for report in reports %}
+                <li class="report-item">
+                    <a href="{{ report.date }}/{{ report.path }}" class="report-link" target="_blank">{{ report.date }}</a>
+                    <div class="report-info">总更新数: {{ report.total_count }} | CVE数: {{ report.cve_count }} | 关键字监控数: {{ report.keyword_count }} | 红队工具更新数: {{ report.tools_count }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </main>
+        
+        <footer>
+            <p>Generated by GitHub Monitor</p>
+        </footer>
+    </body>
+    </html>
+    """
+    
+    try:
+        # 获取所有已生成的日报
+        import os
+        import re
+        reports = []
+        report_dict = {}  # 使用字典确保每个日期只有一个条目
+        
+        if os.path.exists(archive_dir):
+            # 遍历archive目录下的所有子目录
+            for root, dirs, files in os.walk(archive_dir):
+                # 遍历所有HTML文件
+                for filename in files:
+                    if filename.endswith('.html') and filename.startswith('Daily_'):
+                        date = filename[6:-5]  # 提取日期部分
+                        file_path = os.path.join(root, filename)
+                        
+                        # 读取HTML文件，提取统计信息
+                        total_count = 0
+                        cve_count = 0
+                        keyword_count = 0
+                        tools_count = 0
+                        
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                # 从HTML中提取统计数据
+                                total_match = re.search(r'总更新数.*?(\d+)', content)
+                                if total_match:
+                                    total_count = total_match.group(1)
+                                
+                                cve_match = re.search(r'CVE数.*?(\d+)', content)
+                                if cve_match:
+                                    cve_count = cve_match.group(1)
+                                
+                                keyword_match = re.search(r'关键字监控数.*?(\d+)', content)
+                                if keyword_match:
+                                    keyword_count = keyword_match.group(1)
+                                
+                                tools_match = re.search(r'红队工具更新数.*?(\d+)', content)
+                                if tools_match:
+                                    tools_count = tools_match.group(1)
+                        except Exception as e:
+                            print(f"读取日报文件 {file_path} 失败: {e}")
+                        
+                        # 将日报信息添加到字典中，相同日期会覆盖旧条目
+                        report_dict[date] = {
+                            'date': date,
+                            'path': filename,
+                            'total_count': total_count,
+                            'cve_count': cve_count,
+                            'keyword_count': keyword_count,
+                            'tools_count': tools_count
+                        }
+            
+            # 将字典转换为列表
+            reports = list(report_dict.values())
+            # 按日期降序排序
+            reports.sort(key=lambda x: x['date'], reverse=True)
+        
+        # 渲染index.html
+        template = Template(index_template)
+        html_content = template.render(reports=reports)
+        
+        # 写入index.html文件
+        index_path = os.path.join(archive_dir, 'index.html')
+        with open(index_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"index.html已更新: {index_path}")
+    except Exception as e:
+        print(f"更新index.html失败: {e}")
 
 # 创建GitHub Issue
 def create_github_issue(title, body):

@@ -6,3 +6,5 @@ pytz
 python-telegram-bot
 redis
 python-dateutil
+markdown
+jinja2

@@ -31,6 +31,13 @@ all_config:
     - token: 123         # Telegram Bot Token
     - group_id: 123      # Telegram 群组ID
     - app_name: tgbot
+  
+  discard:
+    - enable: 0          # 1=启用，0=禁用
+    - webhook: xxx       # Discard的webhook地址
+    - send_daily_report: 0  # 1=启用日报推送，0=禁用
+    - send_normal_msg: 1    # 1=启用普通消息推送，0=禁用
+    - app_name: discard
 
   # 翻译配置
   translate:

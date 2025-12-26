@@ -28,6 +28,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DINGDING_SECRETKEY: ${{ secrets.DINGDING_SECRETKEY }}
           DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}
+          # Discard推送环境变量支持
+          DISCARD_WEBHOOK: ${{ secrets.DISCARD_WEBHOOK }}
+          DISCARD_SWITCH: ${{ secrets.DISCARD_SWITCH }}
+          DISCARD_SEND_DAILY_REPORT: ${{ secrets.DISCARD_SEND_DAILY_REPORT }}
+          DISCARD_SEND_NORMAL_MSG: ${{ secrets.DISCARD_SEND_NORMAL_MSG }}
+          # Feishu推送环境变量支持
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          # TGBot推送环境变量支持
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_GROUP_ID: ${{ secrets.TG_GROUP_ID }}
           # 百度翻译环境变量支持
           BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
           BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
