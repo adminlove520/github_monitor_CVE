@@ -833,7 +833,9 @@ def getUserRepos(user):
                     if load_config()[0] == "tgbot":
                         tgbot(text,body,load_config()[2],load_config()[3])
                     if load_config()[0] == "discard":
-                        discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
+                        tools_name = json_str[i]['name']
+                        if discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg']):
+                            logger.info(f"discard 发送用户仓库 {tools_name} 成功")
     except Exception as e:
         print(e, "github链接不通")
 
@@ -904,7 +906,8 @@ def send_body(url,query_pushed_at,query_tag_name):
                 if load_config()[0] == "tgbot":
                     tgbot(text,body,load_config()[2],load_config()[3])
                 if load_config()[0] == "discard":
-                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
+                    if discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg']):
+                        logger.info(f"discard 发送工具更新 {tools_name} 成功")
                 conn = sqlite3.connect('data.db')
                 cur = conn.cursor()
                 sql_grammar = "UPDATE redteam_tools_monitor SET pushed_at = '{}' WHERE tools_name='{}'" .format(new_pushed_at,tools_name)
@@ -930,7 +933,8 @@ def send_body(url,query_pushed_at,query_tag_name):
             if load_config()[0] == "tgbot":
                 tgbot(text, body, load_config()[2], load_config()[3])
             if load_config()[0] == "discard":
-                discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
+                if discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg']):
+                    logger.info(f"discard 发送工具更新 {tools_name} 成功")
             conn = sqlite3.connect('data.db')
             cur = conn.cursor()
             sql_grammar = "UPDATE redteam_tools_monitor SET pushed_at = '{}' WHERE tools_name='{}'" .format(new_pushed_at,tools_name)
@@ -1395,10 +1399,10 @@ def discard(text, msg, webhook, send_normal_msg=1, is_daily_report=False, html_f
         # 检查推送开关
         if GLOBAL_CONFIG['workflow']['push_switch'] != 'ON':
             print("[+] 推送功能已关闭")
-            return
+            return False
             
         if send_normal_msg == 0 and not is_daily_report:
-            return
+            return False
         
         headers = {
             "Content-Type": "application/json;charset=utf-8"
@@ -1459,12 +1463,15 @@ def discard(text, msg, webhook, send_normal_msg=1, is_daily_report=False, html_f
         response = http_session.post(webhook, json=data, headers=headers, timeout=10)
         if response.status_code in [200, 204]:
             print(f"Discard推送成功: {text}")
+            update_push_count()
+            return True
         else:
             print(f"Discard推送失败: HTTP状态码 - {response.status_code}")
             print(f"响应内容: {response.text}")
+            return False
     except Exception as e:
         print(f"Discard推送失败: {e}")
-        pass
+        return False
 
 # 判断是否存在该CVE
 def exist_cve(cve):
@@ -1806,8 +1813,8 @@ def sendNews(data):
                     tgbot(text, body, load_config()[2], load_config()[3])
                     logger.info(f"tgbot 发送 CVE {cve_name} 成功")
                 elif app_name == "discard":
-                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
-                    logger.info(f"discard 发送 CVE {cve_name} 成功")
+                    if discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg']):
+                        logger.info(f"discard 发送 CVE {cve_name} 成功")
             except IndexError as e:
                 logger.error(f"处理CVE数据时索引错误: {e}")
             except Exception as e:
@@ -1853,8 +1860,8 @@ def sendKeywordNews(keyword, data):
                     tgbot(text, body, load_config()[2], load_config()[3])
                     logger.info(f"tgbot 发送关键字 {keyword} 的项目 {keyword_name} 成功")
                 elif app_name == "discard":
-                    discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg'])
-                    logger.info(f"discard 发送关键字 {keyword} 的项目 {keyword_name} 成功")
+                    if discard(text, body, load_config()[2], GLOBAL_CONFIG['push_channel']['send_normal_msg']):
+                        logger.info(f"discard 发送关键字 {keyword} 的项目 {keyword_name} 成功")
             except Exception as e:
                 logger.error(f"处理关键字 {keyword} 的监控数据时出错: {e}")
                 pass
@@ -2141,7 +2148,7 @@ def generate_daily_report(cve_data=None, keyword_data=None, tools_update_data=No
     # 推送日报到discard
     app_name = load_config()[0]
     if app_name == "discard" and GLOBAL_CONFIG['push_channel']['send_daily_report'] == 1:
-        text = f"GitHub监控日报 {today}"
+        text = f"GitHub监控日报·{today}"
         msg = f"共收集到 {total_count} 条更新，其中CVE {cve_count} 条，关键字监控 {keyword_count} 条，红队工具 {tools_count} 条"
         discard(text, msg, load_config()[2], is_daily_report=True, html_file=html_report_path, markdown_content=report_content)
     
