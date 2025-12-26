@@ -16,7 +16,7 @@ all_config:
   # 消息推送配置
   # 只需要启用一个推送渠道即可
   dingding:
-    - enable: 1          # 1=启用，0=禁用
+    - enable: 0          # 1=启用，0=禁用
     - webhook: https://oapi.dingtalk.com/robot/send?access_token=
     - secretKey: 
     - app_name: dingding
@@ -33,10 +33,10 @@ all_config:
     - app_name: tgbot
   
   discard:
-    - enable: 0          # 1=启用，0=禁用
+    - enable: 1          # 1=启用，0=禁用
     - webhook: xxx       # Discard的webhook地址
-    - send_daily_report: 0  # 1=启用日报推送，0=禁用
-    - send_normal_msg: 1    # 1=启用普通消息推送，0=禁用
+    - send_daily_report: 1  # 1=启用日报推送，0=禁用
+    - send_normal_msg: 0    # 1=启用普通消息推送，0=禁用
     - app_name: discard
 
   # 翻译配置

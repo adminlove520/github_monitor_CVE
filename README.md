@@ -68,6 +68,13 @@ python github_cve_monitor.py
    - `GITHUB_TOKEN`: GitHub API Token
    - `DINGDING_WEBHOOK`: 钉钉机器人 Webhook
    - `DINGDING_SECRETKEY`: 钉钉机器人密钥
+   - `FEISHU_WEBHOOK`: 飞书机器人 Webhook
+   - `TG_BOT_TOKEN`: Telegram Bot Token
+   - `TG_GROUP_ID`: Telegram 群组 ID
+   - `DISCARD_WEBHOOK`: Discard 推送 Webhook
+   - `DISCARD_SWITCH`: Discard 推送开关
+   - `DISCARD_SEND_DAILY_REPORT`: Discard 日报推送开关
+   - `DISCARD_SEND_NORMAL_MSG`: Discard 普通消息推送开关
    - `BAIDU_APP_ID`: 百度翻译 APP ID
    - `BAIDU_SECRET_KEY`: 百度翻译密钥
 3. 启用 GitHub Actions
