@@ -1,5 +1,11 @@
 # github-monitor
 
+> 实时监控 GitHub 上新增的 CVE、自定义关键词、安全工具更新、大佬仓库监控，并多渠道推送通知。
+
+当前版本：**V1.1.0**
+版本更新时间：2026-01-05
+
+
 ## 实时监控github上新增的cve、自定义关键词、安全工具更新、大佬仓库监控，并多渠道推送通知
 
 每日定时检测github是否有新的cve漏洞提交、安全工具更新记录、关键词监控和大佬仓库更新，若有则通过配置的渠道通知用户
@@ -61,7 +67,7 @@ pip install -r requirements.txt
 python github_cve_monitor.py
 ```
 
-### GitHub Actions 部署
+### GitHub Actions 部署 (免费)
 
 1. Fork 本仓库
 2. 添加 Secrets：
@@ -78,6 +84,15 @@ python github_cve_monitor.py
    - `BAIDU_APP_ID`: 百度翻译 APP ID
    - `BAIDU_SECRET_KEY`: 百度翻译密钥
 3. 启用 GitHub Actions
+
+### Docker / Zeabur 部署 (推荐)
+
+代码推送到 `main` 分支会自动构建镜像到 GHCR。
+
+1. **部署**：在 Zeabur 或 Docker 环境中使用镜像 `ghcr.io/${{ github.repository_owner }}/github_monitor:latest`。
+2. **环境变量**：参考 GitHub Actions 部署中的 Secrets。
+3. **数据持久化 (Zeabur)**：
+   - 挂载路径: `/app/data.db`。挂载此文件以确保数据库在重启后不会丢失。
 
 ## 日报功能
 

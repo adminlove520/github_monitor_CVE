@@ -1,0 +1,97 @@
+name: Version Bump
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'CHANGELOG.md'
+  workflow_dispatch:
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: get_version
+        shell: bash
+        run: |
+          # 从代码中获取当前版本号
+          current_version=$(grep -oP '__version__ = "[^"]+' github_cve_monitor.py | cut -d'"' -f2)
+          echo "Current version: $current_version"
+          echo "current_version=$current_version" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          # 解析当前版本号（格式：V1.1.0）
+          current_version=${{ steps.get_version.outputs.current_version }}
+          
+          # 提取版本号的数字部分和后缀
+          if [[ $current_version =~ ^V([0-9]+)\.([0-9]+)\.([0-9]+)([a-z]?)$ ]]; then
+            major=${BASH_REMATCH[1]}
+            minor=${BASH_REMATCH[2]}
+            patch=${BASH_REMATCH[3]}
+            suffix=${BASH_REMATCH[4]}
+            
+            # 自动递增patch版本
+            new_patch=$((patch + 1))
+            new_version="V$major.$minor.$new_patch$suffix"
+          else
+            # 如果版本号格式不符合预期，使用默认值
+            new_version="V1.1.1"
+          fi
+          
+          echo "New version: $new_version"
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Update version in files
+        shell: bash
+        run: |
+          new_version=${{ steps.bump_version.outputs.new_version }}
+          current_date=$(date +'%Y-%m-%d')
+          
+          # 更新主程序中的版本号
+          sed -i "s/__version__ = .*/__version__ = \"$new_version\"/" github_cve_monitor.py
+          
+          # 更新README.md中的版本信息
+          # 假设 README 中有 "当前版本：**V1.1.0**" 和 "版本更新时间：2026-01-05"
+          sed -i "s/当前版本：\*\*.*\*\*/当前版本：\*\*$new_version\*\*/" README.md || true
+          sed -i "s/版本更新时间：[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/版本更新时间：$current_date/" README.md || true
+
+      - name: Check if tag exists
+        id: check_tag
+        shell: bash
+        run: |
+          if git rev-parse --verify "${{ steps.bump_version.outputs.new_version }}" 2>/dev/null; then
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.bump_version.outputs.new_version }} already exists"
+          else
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.bump_version.outputs.new_version }} does not exist"
+          fi
+
+      - name: Commit and push changes without tagging
+        if: steps.check_tag.outputs.tag_exists == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Bump version to ${{ steps.bump_version.outputs.new_version }}"
+          push_options: --force-with-lease
+
+      - name: Commit and push changes with tagging
+        if: steps.check_tag.outputs.tag_exists == 'false'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Bump version to ${{ steps.bump_version.outputs.new_version }}"
+          tagging_message: "${{ steps.bump_version.outputs.new_version }}"
+          push_options: --force-with-lease

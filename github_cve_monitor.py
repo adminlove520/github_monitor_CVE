@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding:utf-8 -*-
 # @Author : anonymous520
+__version__ = "V1.1.0"
 
 # 每3分钟检测一次github
 # 配置优先级: 环境变量 > 配置文件
