@@ -1,0 +1,355 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>GitHub监控日报 2026-02-01</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            
+            header {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                color: #333;
+                padding: 30px;
+                border-radius: 16px;
+                text-align: center;
+                margin-bottom: 30px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInDown 0.6s ease-out;
+            }
+            
+            h1 {
+                margin: 0;
+                font-size: 2.5rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 10px;
+            }
+            
+            h2 {
+                color: #667eea;
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 10px;
+                margin-top: 30px;
+                margin-bottom: 20px;
+                font-size: 1.8rem;
+            }
+            
+            h3 {
+                color: #333;
+                margin-top: 20px;
+                margin-bottom: 15px;
+                font-size: 1.4rem;
+            }
+            
+            ul {
+                list-style-type: none;
+                padding: 0;
+            }
+            
+            li {
+                margin-bottom: 15px;
+                padding: 15px;
+                background-color: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+            
+            li:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            }
+            
+            a {
+                color: #667eea;
+                text-decoration: none;
+                font-weight: 500;
+                transition: color 0.3s ease;
+            }
+            
+            a:hover {
+                color: #764ba2;
+                text-decoration: underline;
+            }
+            
+            .stats {
+                display: flex;
+                justify-content: space-around;
+                margin: 30px 0;
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                animation: fadeInUp 0.6s ease-out 0.2s both;
+            }
+            
+            .stat-item {
+                text-align: center;
+                flex: 1;
+                padding: 0 20px;
+            }
+            
+            .stat-item:not(:last-child) {
+                border-right: 1px solid #e0e0e0;
+            }
+            
+            .stat-number {
+                font-size: 2.8rem;
+                font-weight: bold;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 5px;
+            }
+            
+            .stat-label {
+                color: #666;
+                font-size: 1.1rem;
+                font-weight: 500;
+            }
+            
+            .details {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                margin-bottom: 30px;
+                animation: fadeInUp 0.6s ease-out 0.4s both;
+            }
+            
+            footer {
+                text-align: center;
+                margin-top: 50px;
+                color: white;
+                font-size: 1rem;
+                background: rgba(0, 0, 0, 0.1);
+                padding: 20px;
+                border-radius: 12px;
+                animation: fadeIn 0.6s ease-out 0.6s both;
+            }
+            
+            /* 动画效果 */
+            @keyframes fadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            
+            /* 响应式设计 */
+            @media (max-width: 768px) {
+                body {
+                    padding: 10px;
+                }
+                
+                h1 {
+                    font-size: 2rem;
+                }
+                
+                h2 {
+                    font-size: 1.5rem;
+                }
+                
+                h3 {
+                    font-size: 1.2rem;
+                }
+                
+                .stats {
+                    flex-direction: column;
+                    gap: 20px;
+                    padding: 20px;
+                }
+                
+                .stat-item:not(:last-child) {
+                    border-right: none;
+                    border-bottom: 1px solid #e0e0e0;
+                    padding-bottom: 20px;
+                }
+                
+                .details {
+                    padding: 20px;
+                }
+                
+                header {
+                    padding: 20px;
+                }
+            }
+            
+            /* 卡片悬停效果 */
+            .card {
+                transition: all 0.3s ease;
+            }
+            
+            .card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            }
+            
+            /* 生成时间样式 */
+            .generate-time {
+                color: #666;
+                font-size: 1rem;
+                font-weight: 500;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>GitHub监控日报 2026-02-01</h1>
+            <p class="generate-time">生成时间: 2026-02-01 02:31:09</p>
+        </header>
+        
+        <div class="stats card">
+            <div class="stat-item">
+                <div class="stat-number">6</div>
+                <div class="stat-label">总更新数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">1</div>
+                <div class="stat-label">CVE数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">4</div>
+                <div class="stat-label">关键字监控数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">1</div>
+                <div class="stat-label">红队工具数</div>
+            </div>
+        </div>
+        
+        <div class="details card">
+            <h1>GitHub监控更新提醒日报</h1>
+<h2>当日情报_2026-02-01</h2>
+<h2>一、更新概览</h2>
+<h3>1.1 更新统计</h3>
+<ul>
+<li>总更新数量：6</li>
+<li>CVE数量：1</li>
+<li>关键字监控数量：4</li>
+<li>红队工具更新数量：1</li>
+</ul>
+<h3>1.2 更新关键词</h3>
+<ul>
+<li>CVE</li>
+<li>红队工具</li>
+</ul>
+<h2>二、更新详情</h2>
+<h3>2.1 CVE更新</h3>
+<ul>
+<li><a href="https://github.com/MOGMUNI/CVE-2026-21858">CVE-2026-21858</a></li>
+</ul>
+<h3>2.2 关键字监控更新</h3>
+<ul>
+<li><a href="https://github.com/compiler-explorer/compiler-explorer">compiler-explorer</a></li>
+<li><a href="https://github.com/lintsinghua/DeepAudit">DeepAudit</a></li>
+<li><a href="https://github.com/adminlove520/Poc-Monitor_v1.0.1">Poc-Monitor_v1.0.1</a></li>
+<li><a href="https://github.com/nomi-sec/PoC-in-GitHub">PoC-in-GitHub</a></li>
+</ul>
+<h3>2.3 红队工具更新</h3>
+<ul>
+<li><a href="https://github.com/search?q=nuclei_poc">nuclei_poc</a></li>
+</ul>
+<h2>三、项目详情</h2>
+<h3>3.1 CVE详情</h3>
+<h3>CVE-2026-21858</h3>
+<ul>
+<li>GitHub地址: https://github.com/MOGMUNI/CVE-2026-21858</li>
+<li>推送时间: 2026-02-01</li>
+<li>类型: CVE</li>
+</ul>
+<h3>3.2 关键字监控详情</h3>
+<h3>compiler-explorer</h3>
+<ul>
+<li>GitHub地址: https://github.com/compiler-explorer/compiler-explorer</li>
+<li>推送时间: 2026-02-01</li>
+<li>类型: 关键字监控</li>
+</ul>
+<h3>DeepAudit</h3>
+<ul>
+<li>GitHub地址: https://github.com/lintsinghua/DeepAudit</li>
+<li>推送时间: 2026-02-01</li>
+<li>类型: 关键字监控</li>
+</ul>
+<h3>Poc-Monitor_v1.0.1</h3>
+<ul>
+<li>GitHub地址: https://github.com/adminlove520/Poc-Monitor_v1.0.1</li>
+<li>推送时间: 2026-02-01</li>
+<li>类型: 关键字监控</li>
+</ul>
+<h3>PoC-in-GitHub</h3>
+<ul>
+<li>GitHub地址: https://github.com/nomi-sec/PoC-in-GitHub</li>
+<li>推送时间: 2026-02-01</li>
+<li>类型: 关键字监控</li>
+</ul>
+<h3>3.3 红队工具详情</h3>
+<h3>nuclei_poc</h3>
+<ul>
+<li>GitHub地址: https://github.com/search?q=nuclei_poc</li>
+<li>推送时间: 2026-02-01</li>
+<li>版本: no releases</li>
+<li>类型: 红队工具</li>
+</ul>
+<h2>四、知识库标签</h2>
+<ul>
+<li>安全资讯</li>
+<li>CVE</li>
+<li>GitHub监控</li>
+<li>红队工具</li>
+</ul>
+        </div>
+        
+        <footer>
+            <p style="text-align: center; margin: 0;">Power By 东方隐侠安全团队·Anonymous@ <a href="https://www.dfyxsec.com/" style="color: white; text-decoration: underline;">隐侠安全客栈</a></p>
+        </footer>
+    </body>
+    </html>
+    
